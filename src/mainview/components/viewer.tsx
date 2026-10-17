@@ -71,7 +71,7 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 		});
 	}, []);
 
-	// Tweets already deleted from X are dropped everywhere: columns, counts, the marked list.
+	// Tweets already deleted from X are dropped everywhere: columns, counts, the review panel.
 	const live = useMemo(() => {
 		if (!data) return null;
 		const out = {} as Archive;
@@ -194,13 +194,16 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 		<div className="flex h-dvh flex-col">
 			<header className="flex flex-wrap items-center gap-2.5 border-b px-5 py-3.5">
 				<h1 className="mr-3 flex items-center gap-2.5 text-lg font-bold tracking-tight">
-					<img src={logo} alt="" className="h-9 w-auto" />
+					<img src={logo} alt="" className="h-7 w-auto" />
 					Meowl Delete
 				</h1>
 				<div className="relative min-w-48 flex-1">
 					<SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input type="search" className="h-9 pl-9" placeholder="Search all columns…" value={query} onChange={(e) => setQuery(e.target.value)} />
 				</div>
+				<Button variant="ghost" size="icon" onClick={onOpenSetup} disabled={running} title="Change archive folder" aria-label="Change archive folder">
+					<FolderCogIcon />
+				</Button>
 				<div className="flex items-center">
 					<Button variant={filterCount ? "default" : "secondary"} className="rounded-full" onClick={() => setFiltersOpen(true)}>
 						<SlidersHorizontalIcon data-icon="inline-start" /> Filters
@@ -213,17 +216,13 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 					)}
 				</div>
 				<SortMenu order={order} onOrderChange={setOrder} popular={popular} onPopularChange={setPopular} />
-				<Button variant={reviewOpen ? "secondary" : "ghost"} onClick={() => showReview(!reviewOpen)} aria-pressed={reviewOpen} title={reviewOpen ? "Hide the marked list" : "Show what's marked for deletion"}>
+				<Button variant={reviewOpen ? "secondary" : "ghost"} onClick={() => showReview(!reviewOpen)} aria-pressed={reviewOpen} title={reviewOpen ? "Hide Review selected" : "Review selected"}>
 					<ListChecksIcon data-icon="inline-start" />
 					<Badge variant={selected.size ? "destructive" : "secondary"} className="tabular-nums">{selected.size.toLocaleString()}</Badge>
-					marked
 				</Button>
 				<Button variant="destructive" onClick={() => setDeleteOpen(true)} disabled={running || !selected.size} title={running ? "A deletion is running" : selected.size ? "Delete everything ticked from X" : "Tick some tweets first"}>
 					{running ? <Loader2Icon data-icon="inline-start" className="animate-spin" /> : <Trash2Icon data-icon="inline-start" />}
 					{running ? "Deleting…" : "Delete"}
-				</Button>
-				<Button variant="ghost" size="icon" onClick={onOpenSetup} disabled={running} title="Change archive folder" aria-label="Change archive folder">
-					<FolderCogIcon />
 				</Button>
 			</header>
 

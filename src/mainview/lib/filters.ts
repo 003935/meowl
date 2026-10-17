@@ -4,7 +4,7 @@ export type Presence = "all" | "only" | "exclude";
 
 // Loosely modelled on X's advanced search, limited to what the archive records.
 export type Filters = {
-	include: string; // comma-separated words / phrases / #tags / @names; all must appear
+	include: string; // comma-separated words / phrases / #tags / @names; at least one must appear
 	exclude: string; // comma-separated; none may appear
 	links: Presence;
 	media: Presence;
@@ -70,7 +70,7 @@ export function makeMatcher(f: Filters, quick: string) {
 		// (replies start with "@whoever", so "@whoever" also finds replies to them)
 		const has = (term: string) =>
 			/\s/.test(term) ? text.includes(term) : /^[#@]/.test(term) ? tokens.includes(term) : plain.has(term);
-		if (!include.every(has)) return false;
+		if (include.length && !include.some(has)) return false;
 		if (exclude.some(has)) return false;
 		return true;
 	};

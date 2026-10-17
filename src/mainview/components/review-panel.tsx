@@ -69,7 +69,7 @@ export function ReviewPanel({ data, selected, onToggle, onClose }: Props) {
 	}, [dragging, width]);
 
 	return (
-		<aside className="relative flex min-h-0 shrink-0 flex-col border-l bg-background" style={{ width }} aria-label="Marked for deletion">
+		<aside className="relative flex min-h-0 shrink-0 flex-col border-l bg-background" style={{ width }} aria-label="Review selected">
 			<div
 				role="separator"
 				aria-orientation="vertical"
@@ -93,7 +93,7 @@ export function ReviewPanel({ data, selected, onToggle, onClose }: Props) {
 			<div className="flex items-center gap-2 border-b px-4 py-2.5">
 				<h2 className="flex flex-1 items-center gap-2 text-sm font-semibold">
 					<ListChecksIcon className="size-4 text-muted-foreground" aria-hidden />
-					Marked <span className="font-normal text-muted-foreground tabular-nums">({selected.size.toLocaleString()})</span>
+					Review selected <span className="font-normal text-muted-foreground tabular-nums">({selected.size.toLocaleString()})</span>
 				</h2>
 				{KINDS.map(({ kind: k, title, Icon }) => (
 					<Button
@@ -112,7 +112,7 @@ export function ReviewPanel({ data, selected, onToggle, onClose }: Props) {
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-y-auto">
-				{list.length === 0 && <div className="px-4 py-10 text-center text-sm text-muted-foreground">Nothing marked{kind ? " here" : " yet"}.</div>}
+				{list.length === 0 && <div className="px-4 py-10 text-center text-sm text-muted-foreground">Nothing selected{kind ? " here" : " yet"}.</div>}
 				{list.slice(0, shown).map((t) => (
 					<TweetCard key={t.id} tweet={t} selected={selected.has(t.id)} onToggle={toggle} />
 				))}

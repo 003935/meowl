@@ -18,9 +18,10 @@ const match = (f: Partial<Filters>, t: Partial<Tweet>, quick = "") =>
 	makeMatcher({ ...EMPTY_FILTERS, ...f }, quick)(tweet(t));
 
 describe("words", () => {
-	test("include: every comma-separated term must appear, any order, ignoring case", () => {
-		expect(match({ include: "happening, what's" }, { text: "What's happening today" })).toBe(true);
-		expect(match({ include: "happening, cats" }, { text: "What's happening today" })).toBe(false);
+	test("include: any one of the comma-separated terms is enough, ignoring case", () => {
+		expect(match({ include: "Happening, cats" }, { text: "What's happening today" })).toBe(true);
+		expect(match({ include: "dogs, cats" }, { text: "What's happening today" })).toBe(false);
+		expect(match({ include: "" }, { text: "anything" })).toBe(true);
 	});
 	test("whole words, not substrings", () => {
 		expect(match({ include: "cat" }, { text: "concatenate" })).toBe(false);

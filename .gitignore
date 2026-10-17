@@ -14,3 +14,9 @@ deleted.json
 backups/
 .env
 .cottontail-tmp/
+
+# Claude Code restart hook state
+.claude/.app-restart-stamp
+.claude/hooks/logs/
+.claude/hooks/app.log*
+.claude/settings.local.json

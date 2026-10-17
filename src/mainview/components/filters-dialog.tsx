@@ -96,18 +96,23 @@ export function FiltersDialog({ open, onOpenChange, value, onApply, engagement, 
 						<Button variant="ghost" size="icon" aria-label="Close"><XIcon /></Button>
 					</DialogClose>
 					<DialogTitle className="flex-1 text-xl font-bold">Filters</DialogTitle>
-					<DialogDescription className="sr-only">Narrow the three columns by words, links and media, engagement and dates.</DialogDescription>
+					<DialogDescription className="sr-only">Narrow the three columns by words, dates, attachments and engagement.</DialogDescription>
 					<Button variant="ghost" onClick={() => setDraft(EMPTY_FILTERS)}>Reset</Button>
 					<Button className="rounded-full px-4" onClick={() => { onApply(draft); onOpenChange(false); }}>Apply</Button>
 				</div>
 
 				<form className="overflow-y-auto" onSubmit={(e) => { e.preventDefault(); onApply(draft); onOpenChange(false); }}>
 					<Section title="Words">
-						<Field id="f-include" label="Include" placeholder={'"exact phrase", word, #tag, @account'} hint="Tweets must contain all of these. Comma separated." {...text("include")} />
+						<Field id="f-include" label="Include" placeholder={'"exact phrase", word, #tag, @account'} hint="Show tweets containing any of these. Comma separated." {...text("include")} />
 						<Field id="f-exclude" label="Exclude" placeholder={'"exact phrase", word, #tag, @account'} hint="Hide tweets containing any of these. Comma separated." {...text("exclude")} />
 					</Section>
 					<Separator />
-					<Section title="Filters">
+					<Section title="Dates">
+						<DateField label="From" value={draft.since} onChange={(since) => setDraft((d) => ({ ...d, since }))} minYear={minYear} maxYear={maxYear} />
+						<DateField label="To" value={draft.until} onChange={(until) => setDraft((d) => ({ ...d, until }))} minYear={minYear} maxYear={maxYear} />
+					</Section>
+					<Separator />
+					<Section title="Attachments">
 						<PresenceField label="Links" noun="links" value={draft.links} onChange={(links) => setDraft((d) => ({ ...d, links }))} />
 						<PresenceField label="Media" noun="photos or videos" value={draft.media} onChange={(media) => setDraft((d) => ({ ...d, media }))} />
 					</Section>
@@ -125,11 +130,6 @@ export function FiltersDialog({ open, onOpenChange, value, onApply, engagement, 
 							min={draft.minReposts} max={draft.maxReposts}
 							onChange={(minReposts, maxReposts) => setDraft((d) => ({ ...d, minReposts, maxReposts }))}
 						/>
-					</Section>
-					<Separator />
-					<Section title="Dates">
-						<DateField label="From" value={draft.since} onChange={(since) => setDraft((d) => ({ ...d, since }))} minYear={minYear} maxYear={maxYear} />
-						<DateField label="To" value={draft.until} onChange={(until) => setDraft((d) => ({ ...d, until }))} minYear={minYear} maxYear={maxYear} />
 					</Section>
 					<button type="submit" hidden />
 				</form>
