@@ -9,6 +9,25 @@ Built with [Electrobun](https://blackboard.sh/electrobun/) (main process on Bun,
 
 >  Using unofficial X APIs breaks X's Terms of Service and could get the account limited. Deletion is permanent. Test on a throwaway account first (`test-delete.ts`).
 
+## Screenshots
+
+![The main viewer: tweets, replies and retweets side by side, with the Review selected panel open](docs/screenshots/viewer.png)
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/setup.png" alt="Setup screen"></td>
+    <td width="33%"><img src="docs/screenshots/filters.png" alt="Filters: include/exclude words, dates and attachments"></td>
+    <td width="33%"><img src="docs/screenshots/filters-engagement.png" alt="Filters: likes and reposts charts with a dragged range"></td>
+  </tr>
+  <tr>
+    <td align="center">Setup</td>
+    <td align="center">Filters</td>
+    <td align="center">Engagement: drag to pick a range</td>
+  </tr>
+</table>
+
+<sub>Screenshots use a made-up demo archive.</sub>
+
 ## Setup
 
 Requires [Bun](https://bun.sh) 1.2+.
@@ -30,8 +49,8 @@ bun run build     # packaged app for this platform → build/ and artifacts/
 
 In the app:
 
-1. **Choose your archive.** Download it from x.com → Settings → Your account → Download an archive, unzip it, then pick the folder that contains `data/tweets.js`. Change it later with **Archive** in the header.
-2. **Tick tweets.** Click a tweet (or shift-click a range) to tick it. Ticks autosave. Narrow the columns with the search box and **Filters** (include/exclude words, phrases, #tags and @accounts, links/media, dates, and likes/reposts, where you can drag across a chart to pick a range); each column's **Tick all** / **Untick all** button only affects what's shown. **marked** opens a side panel of everything ticked (drag its edge to resize) that stays open while you keep ticking.
+1. **Choose your archive.** Download it from x.com → Settings → Your account → Download an archive, unzip it, then pick the folder that contains `data/tweets.js`. Change it later with the folder button in the header.
+2. **Tick tweets.** Click a tweet (or shift-click a range) to tick it. Ticks autosave. Narrow the columns with the search box and **Filters** (include/exclude words, phrases, #tags and @accounts, links/media, dates, and likes/reposts, where you can drag across a chart to pick a range); each column's **Tick all** / **Untick all** button only affects what's shown. The **Review selected** button (the list icon with the count) opens a side panel of everything ticked (drag its edge to resize) that stays open while you keep ticking.
 3. **Delete.** Press **Delete**, paste your `auth_token` the first time (the dialog explains where to find it) and press **Delete**. Progress shows under the header, with **Stop**.
 
 Ctrl + / Ctrl − / Ctrl 0 (or Ctrl + mouse wheel) scale the whole UI.
