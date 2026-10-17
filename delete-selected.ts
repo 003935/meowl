@@ -1,6 +1,6 @@
 // Command-line alternative to the app's delete button.
 // Deletes the tweets ticked in the app. Point it at the app's data folder (shown
-// at the bottom of the app's delete panel) with --data or TWEET_DELETER_DATA.
+// under "How do I get my auth_token?" in the app's delete dialog) with --data or TWEET_DELETER_DATA.
 //
 // Dry run (default — prints what it would delete):
 //   bun delete-selected.ts --data "<data folder>"
@@ -15,7 +15,7 @@ const dataArg = process.argv.indexOf("--data");
 const DATA = dataArg > 0 ? process.argv[dataArg + 1] : process.env.TWEET_DELETER_DATA;
 
 if (!DATA) {
-  console.error('Pass the app\'s data folder: bun delete-selected.ts --data "<folder>" (it\'s shown in the app\'s delete panel).');
+  console.error('Pass the app\'s data folder: bun delete-selected.ts --data "<folder>" (it\'s shown in the app\'s delete dialog).');
   process.exit(1);
 }
 

@@ -1,22 +1,24 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { FolderCogIcon, ListChecksIcon, Loader2Icon, PanelTopCloseIcon, PanelTopOpenIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
+import { FolderCogIcon, ListChecksIcon, Loader2Icon, SearchIcon, SlidersHorizontalIcon, Trash2Icon, XIcon } from "lucide-react";
+import { toast } from "sonner";
 import type { AppState, Archive, Kind, Progress } from "../../shared/types";
 import { api } from "@/lib/api";
+import logo from "@/assets/meowl.png";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TweetColumn } from "@/components/tweet-column";
-import { DeletePanel } from "@/components/delete-panel";
-import { useConfirm } from "@/components/confirm-dialog";
+import { DeleteDialog } from "@/components/delete-dialog";
+import { DeleteProgress } from "@/components/delete-progress";
 import { FiltersDialog } from "@/components/filters-dialog";
-import { ReviewSheet } from "@/components/review-sheet";
+import { ReviewPanel } from "@/components/review-panel";
 import { SortMenu, type Order } from "@/components/sort-menu";
 import { KINDS } from "@/lib/kinds";
 import { EMPTY_FILTERS, activeFilterCount, makeMatcher, type Filters } from "@/lib/filters";
 
-const PANEL_KEY = "delPanelHidden";
-const readPanelHidden = () => {
-	try { return localStorage.getItem(PANEL_KEY) === "1"; } catch { return false; }
+const REVIEW_KEY = "reviewPanelOpen";
+const readReviewOpen = () => {
+	try { return localStorage.getItem(REVIEW_KEY) === "1"; } catch { return false; }
 };
 
 export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: () => void }) {
@@ -24,16 +26,15 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [deleted, setDeleted] = useState<Set<string>>(new Set());
-	const [saveState, setSaveState] = useState("saved");
 	const [query, setQuery] = useState("");
 	const [order, setOrder] = useState<Order>("asc");
+	const [popular, setPopular] = useState(false);
 	const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
 	const [filtersOpen, setFiltersOpen] = useState(false);
-	const [reviewOpen, setReviewOpen] = useState(false);
-	const [panelHidden, setPanelHidden] = useState(readPanelHidden);
+	const [reviewOpen, setReviewOpen] = useState(readReviewOpen);
+	const [deleteOpen, setDeleteOpen] = useState(false);
+	const [progressDismissed, setProgressDismissed] = useState(false);
 	const [job, setJob] = useState<Progress | null>(null);
-	const [startError, setStartError] = useState<string | null>(null);
-	const [confirmDialog, confirm] = useConfirm();
 	const lastClicked = useRef<Partial<Record<Kind, string>>>({});
 	const dirty = useRef(false);
 
@@ -55,9 +56,8 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 	// ---- autosave ticks ----
 	useEffect(() => {
 		if (!dirty.current) return;
-		setSaveState("saving…");
 		const t = setTimeout(() => {
-			api.saveSelection([...selected]).then(() => setSaveState("saved"), () => setSaveState("save failed"));
+			api.saveSelection([...selected]).catch(() => toast.error("Couldn’t save your ticks", { id: "save", description: "They’ll be saved with your next change." }));
 		}, 300);
 		return () => clearTimeout(t);
 	}, [selected]);
@@ -71,26 +71,40 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 		});
 	}, []);
 
+	// Tweets already deleted from X are dropped everywhere: columns, counts, the marked list.
+	const live = useMemo(() => {
+		if (!data) return null;
+		const out = {} as Archive;
+		for (const { kind } of KINDS) out[kind] = deleted.size ? data[kind].filter((t) => !deleted.has(t.id)) : data[kind];
+		return out;
+	}, [data, deleted]);
+
 	// ---- filtering ----
 	const term = useDeferredValue(query);
 	const lists = useMemo(() => {
 		const out = { tweets: [], replies: [], retweets: [] } as Archive;
-		if (!data) return out;
-		const matches = makeMatcher(filters, term, state.username);
+		if (!live) return out;
+		const matches = makeMatcher(filters, term);
 		for (const { kind } of KINDS) {
-			out[kind] = data[kind].filter(matches).sort((a, b) => (order === "asc" ? a.ts - b.ts : b.ts - a.ts));
+			out[kind] = live[kind].filter(matches).sort((a, b) => (popular && b.likes - a.likes) || (order === "asc" ? a.ts - b.ts : b.ts - a.ts));
 		}
 		return out;
-	}, [data, term, order, filters, state.username]);
+	}, [live, term, order, popular, filters]);
 	const filterCount = activeFilterCount(filters);
 
 	// year range of the archive, for the date pickers
 	const years = useMemo(() => {
 		let min = Infinity, max = -Infinity;
-		for (const list of Object.values(data ?? {})) for (const t of list) { if (t.ts < min) min = t.ts; if (t.ts > max) max = t.ts; }
+		for (const list of Object.values(live ?? {})) for (const t of list) { if (t.ts < min) min = t.ts; if (t.ts > max) max = t.ts; }
 		const now = new Date().getFullYear();
 		return min <= max ? { min: new Date(min).getFullYear(), max: new Date(max).getFullYear() } : { min: 2006, max: now };
-	}, [data]);
+	}, [live]);
+
+	// every tweet's like and repost counts, for the Engagement charts in Filters
+	const engagement = useMemo(() => {
+		const all = live ? [...live.tweets, ...live.replies, ...live.retweets] : [];
+		return { likes: all.map((t) => t.likes), reposts: all.map((t) => t.retweets_count) };
+	}, [live]);
 
 	function applyFilters(f: Filters) {
 		if (f.since && f.until && f.since > f.until) f = { ...f, since: f.until, until: f.since };
@@ -100,12 +114,9 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 	// ---- ticking ----
 	const listsRef = useRef(lists);
 	listsRef.current = lists;
-	const deletedRef = useRef(deleted);
-	deletedRef.current = deleted;
 
 	const makeToggle = useCallback(
 		(kind: Kind) => (id: string, shift: boolean) => {
-			if (deletedRef.current.has(id)) return;
 			update((s) => {
 				const on = !s.has(id);
 				const ids = listsRef.current[kind].map((t) => t.id);
@@ -113,7 +124,7 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 				const a = prev ? ids.indexOf(prev) : -1, b = ids.indexOf(id);
 				// shift-click: apply to the whole range since the last click in this column
 				const range = shift && a >= 0 && b >= 0 ? ids.slice(Math.min(a, b), Math.max(a, b) + 1) : [id];
-				for (const x of range) if (!deletedRef.current.has(x)) on ? s.add(x) : s.delete(x);
+				for (const x of range) on ? s.add(x) : s.delete(x);
 			});
 			lastClicked.current[kind] = id;
 		},
@@ -121,11 +132,7 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 	);
 	const toggles = useMemo(() => Object.fromEntries(KINDS.map(({ kind }) => [kind, makeToggle(kind)])) as Record<Kind, ReturnType<typeof makeToggle>>, [makeToggle]);
 
-	async function tickAll(kind: Kind) {
-		const list = lists[kind];
-		if (list.length > 50 && !(await confirm({ title: `Tick all ${list.length.toLocaleString()} shown ${kind}?`, description: "They'll be added to what's marked for deletion.", confirm: "Tick all" }))) return;
-		update((s) => { for (const t of list) if (!deleted.has(t.id)) s.add(t.id); });
-	}
+	const tickAll = (kind: Kind) => update((s) => { for (const t of lists[kind]) s.add(t.id); });
 	const untickAll = (kind: Kind) => update((s) => { for (const t of lists[kind]) s.delete(t.id); });
 
 	// ---- deleting ----
@@ -148,42 +155,24 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 	}, []);
 	useEffect(() => () => clearTimeout(pollTimer.current), []);
 
-	async function startDelete(token: string) {
-		const ids = [...selected];
-		const kindOf = new Map<string, Kind>();
-		for (const { kind } of KINDS) for (const t of data![kind]) kindOf.set(t.id, kind);
-		const n = { tweets: 0, replies: 0, retweets: 0 };
-		for (const id of ids) n[kindOf.get(id) ?? "tweets"]++;
-		const ok = await confirm({
-			title: `Permanently delete ${ids.length.toLocaleString()} from X?`,
-			description: (
-				<>
-					<p>{n.tweets} tweets · {n.replies} replies · {n.retweets} retweets</p>
-					<p className="mt-2 font-medium text-destructive">This cannot be undone.</p>
-				</>
-			),
-			confirm: "Delete permanently",
-			destructive: true,
-		});
-		if (!ok) return;
+	// what's ticked, by kind, for the delete dialog
+	const tickedCounts = useMemo(() => {
+		const n: Record<Kind, number> = { tweets: 0, replies: 0, retweets: 0 };
+		if (live) for (const { kind } of KINDS) for (const t of live[kind]) if (selected.has(t.id)) n[kind]++;
+		return n;
+	}, [live, selected]);
 
-		setStartError(null);
-		try {
-			await api.saveSelection(ids); // make sure the server has the latest ticks first
-			setSaveState("saved");
-			await api.startDelete(token);
-		} catch (e) {
-			setStartError((e as Error).message);
-			return;
-		}
+	// Called by the delete dialog; throws (shown in the dialog) if the run can't start.
+	async function startDelete(token: string | null) {
+		await api.saveSelection([...selected]); // make sure the server has the latest ticks first
+		await api.startDelete(token);
+		setProgressDismissed(false);
 		poll();
 	}
 
-	function togglePanel() {
-		setPanelHidden((h) => {
-			try { localStorage.setItem(PANEL_KEY, h ? "0" : "1"); } catch {}
-			return !h;
-		});
+	function showReview(open: boolean) {
+		setReviewOpen(open);
+		try { localStorage.setItem(REVIEW_KEY, open ? "1" : "0"); } catch {}
 	}
 
 	if (loadError) {
@@ -196,21 +185,24 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 			</div>
 		);
 	}
-	if (!data) {
+	if (!live) {
 		return <div className="grid h-dvh place-items-center"><Loader2Icon className="size-6 animate-spin text-muted-foreground" /></div>;
 	}
 
 	const running = !!job?.running;
 	return (
 		<div className="flex h-dvh flex-col">
-			<header className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
-				<h1 className="mr-2 text-base font-semibold">Tweet Archive</h1>
+			<header className="flex flex-wrap items-center gap-2.5 border-b px-5 py-3.5">
+				<h1 className="mr-3 flex items-center gap-2.5 text-lg font-bold tracking-tight">
+					<img src={logo} alt="" className="h-9 w-auto" />
+					Meowl Delete
+				</h1>
 				<div className="relative min-w-48 flex-1">
-					<SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-					<Input type="search" className="pl-8" placeholder="Search all columns…" value={query} onChange={(e) => setQuery(e.target.value)} />
+					<SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+					<Input type="search" className="h-9 pl-9" placeholder="Search all columns…" value={query} onChange={(e) => setQuery(e.target.value)} />
 				</div>
 				<div className="flex items-center">
-					<Button size="sm" variant={filterCount ? "default" : "secondary"} className="rounded-full" onClick={() => setFiltersOpen(true)}>
+					<Button variant={filterCount ? "default" : "secondary"} className="rounded-full" onClick={() => setFiltersOpen(true)}>
 						<SlidersHorizontalIcon data-icon="inline-start" /> Filters
 						{filterCount > 0 && <Badge variant="secondary" className="ml-0.5 h-4 min-w-4 px-1 tabular-nums">{filterCount}</Badge>}
 					</Button>
@@ -220,70 +212,60 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 						</Button>
 					)}
 				</div>
-				<SortMenu value={order} onChange={setOrder} />
-				<Button size="sm" variant="ghost" onClick={() => setReviewOpen(true)} title="Review what's marked for deletion">
+				<SortMenu order={order} onOrderChange={setOrder} popular={popular} onPopularChange={setPopular} />
+				<Button variant={reviewOpen ? "secondary" : "ghost"} onClick={() => showReview(!reviewOpen)} aria-pressed={reviewOpen} title={reviewOpen ? "Hide the marked list" : "Show what's marked for deletion"}>
 					<ListChecksIcon data-icon="inline-start" />
 					<Badge variant={selected.size ? "destructive" : "secondary"} className="tabular-nums">{selected.size.toLocaleString()}</Badge>
 					marked
-					<span className="text-xs font-normal text-muted-foreground">· {saveState}</span>
 				</Button>
-				<Button size="sm" variant="outline" onClick={togglePanel} aria-expanded={!panelHidden}>
-					{panelHidden ? <PanelTopOpenIcon data-icon="inline-start" /> : <PanelTopCloseIcon data-icon="inline-start" />}
-					{panelHidden ? `Show delete panel${running ? " (deleting…)" : ""}` : "Hide delete panel"}
+				<Button variant="destructive" onClick={() => setDeleteOpen(true)} disabled={running || !selected.size} title={running ? "A deletion is running" : selected.size ? "Delete everything ticked from X" : "Tick some tweets first"}>
+					{running ? <Loader2Icon data-icon="inline-start" className="animate-spin" /> : <Trash2Icon data-icon="inline-start" />}
+					{running ? "Deleting…" : "Delete"}
 				</Button>
-				<Button size="sm" variant="ghost" onClick={onOpenSetup} disabled={running} title="Change archive folder or cutoff date">
-					<FolderCogIcon data-icon="inline-start" /> Archive
+				<Button variant="ghost" size="icon" onClick={onOpenSetup} disabled={running} title="Change archive folder" aria-label="Change archive folder">
+					<FolderCogIcon />
 				</Button>
 			</header>
 
-			{!panelHidden && (
-				<DeletePanel
-					ticked={selected.size}
-					job={job}
-					startError={startError}
-					dataDir={state.dataDir}
-					onDelete={startDelete}
-					onStop={() => api.stop().then(poll)}
-				/>
+			{job && (job.running || job.log.length > 0) && !progressDismissed && (
+				<DeleteProgress job={job} onStop={() => api.stop().then(poll)} onDismiss={() => setProgressDismissed(true)} />
 			)}
 
-			<div className="grid min-h-0 flex-1 grid-rows-3 lg:grid-cols-3 lg:grid-rows-1">
-				{KINDS.map(({ kind, title, Icon }) => (
-					<TweetColumn
-						key={kind}
-						title={title}
-						Icon={Icon}
-						list={lists[kind]}
+			<div className="flex min-h-0 flex-1">
+				<div className="grid min-h-0 min-w-0 flex-1 grid-rows-3 lg:grid-cols-3 lg:grid-rows-1">
+					{KINDS.map(({ kind, title, Icon }) => (
+						<TweetColumn
+							key={kind}
+							title={title}
+							Icon={Icon}
+							list={lists[kind]}
+							yearHeaders={!popular}
+							selected={selected}
+							onToggle={toggles[kind]}
+							onTickAll={() => tickAll(kind)}
+							onUntickAll={() => untickAll(kind)}
+						/>
+					))}
+				</div>
+				{reviewOpen && (
+					<ReviewPanel
+						data={live}
 						selected={selected}
-						deleted={deleted}
-						onToggle={toggles[kind]}
-						onTickAll={() => tickAll(kind)}
-						onUntickAll={() => untickAll(kind)}
+						onToggle={(id) => update((s) => (s.has(id) ? s.delete(id) : s.add(id)))}
+						onClose={() => showReview(false)}
 					/>
-				))}
+				)}
 			</div>
+			<DeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} counts={tickedCounts} dataDir={state.dataDir} onDelete={startDelete} />
 			<FiltersDialog
 				open={filtersOpen}
 				onOpenChange={setFiltersOpen}
 				value={filters}
 				onApply={applyFilters}
-				username={state.username}
+				engagement={engagement}
 				minYear={years.min}
 				maxYear={years.max}
 			/>
-			<ReviewSheet
-				open={reviewOpen}
-				onOpenChange={setReviewOpen}
-				data={data}
-				selected={selected}
-				onToggle={(id) => update((s) => (s.has(id) ? s.delete(id) : s.add(id)))}
-				onClear={async () => {
-					if (await confirm({ title: `Untick all ${selected.size.toLocaleString()}?`, description: "Nothing will be marked for deletion.", confirm: "Untick all" })) {
-						update((s) => s.clear());
-					}
-				}}
-			/>
-			{confirmDialog}
 		</div>
 	);
 }

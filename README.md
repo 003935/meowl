@@ -1,4 +1,6 @@
-# Tweet Deleter
+# Meowl Delete
+
+<img src="assets/icon.png" alt="Meowl Delete" width="128">
 
 A desktop app for browsing your Twitter/X data archive in three side-by-side columns (tweets, replies, retweets), ticking what you want gone, and bulk-deleting it from X with live progress.
 
@@ -27,13 +29,15 @@ bun run build     # packaged app for this platform → build/ and artifacts/
 
 In the app:
 
-1. **Choose your archive.** Download it from x.com → Settings → Your account → Download an archive, unzip it, then pick the folder that contains `data/tweets.js`. Pick a cutoff date: only posts before it are listed (default 2024-01-01). Change either later with **Archive** in the header.
-2. **Tick tweets.** Click a tweet (or shift-click a range) to tick it. Ticks autosave. Filter by text or date range; **Tick all shown** ticks only what matches.
-3. **Delete.** Paste your `auth_token` (x.com → DevTools → Application → Cookies → `auth_token`) and click **Delete N ticked**.
+1. **Choose your archive.** Download it from x.com → Settings → Your account → Download an archive, unzip it, then pick the folder that contains `data/tweets.js`. Change it later with **Archive** in the header.
+2. **Tick tweets.** Click a tweet (or shift-click a range) to tick it. Ticks autosave. Narrow the columns with the search box and **Filters** (include/exclude words, phrases, #tags and @accounts, links/media, dates, and likes/reposts, where you can drag across a chart to pick a range); each column's **Tick all** / **Untick all** button only affects what's shown. **marked** opens a side panel of everything ticked (drag its edge to resize) that stays open while you keep ticking.
+3. **Delete.** Press **Delete**, paste your `auth_token` the first time (the dialog explains where to find it) and press **Delete**. Progress shows under the header, with **Stop**.
+
+Ctrl + / Ctrl − / Ctrl 0 (or Ctrl + mouse wheel) scale the whole UI.
 
 Runs are resumable: each success is recorded in `deleted.json` immediately. X allows roughly 200 deletes per 15 minutes per account; the deleter waits out rate limits automatically. A new token for the same account doesn't help.
 
-The app keeps its files (parsed archive, ticks, deletion log) in its per-user data folder, shown under "Where do I find my auth_token?" in the delete panel. The auth token is only held in memory during a run.
+The app keeps its files (parsed archive, ticks, deletion log) in its per-user data folder, shown under "How do I get my auth_token?" in the delete dialog. Once X accepts your auth token, the app remembers it in memory until you quit (so later deletes don't ask again); it's never written to disk.
 
 ### Command line
 

@@ -14,13 +14,16 @@ async function call<T>(path: string, init?: { body?: unknown }): Promise<T> {
 export const api = {
 	state: () => call<AppState>("/api/state"),
 	pickFolder: () => call<{ path: string | null }>("/api/pick", { body: {} }),
-	importArchive: (archivePath: string, cutoff: string) => call<ImportResult>("/api/import", { body: { archivePath, cutoff } }),
+	importArchive: (archivePath: string) => call<ImportResult>("/api/import", { body: { archivePath } }),
 	tweets: () => call<Archive>("/api/tweets"),
 	selection: () => call<string[]>("/api/selection"),
 	saveSelection: (ids: string[]) => call<{ saved: number }>("/api/selection", { body: ids }),
 	deleted: () => call<string[]>("/api/deleted"),
 	progress: () => call<Progress>("/api/progress"),
-	startDelete: (token: string) => call<{ started: boolean }>("/api/delete", { body: { token } }),
+	/** token = null uses the one remembered from earlier this session */
+	startDelete: (token: string | null) => call<{ started: boolean }>("/api/delete", { body: token === null ? { useSaved: true } : { token } }),
+	tokenSaved: () => call<{ saved: boolean }>("/api/token").then((r) => r.saved),
+	forgetToken: () => call<{ saved: boolean }>("/api/token/forget", { body: {} }),
 	stop: () => call<{ stopping: boolean }>("/api/stop", { body: {} }),
 	// Links open in the system browser, not inside the app window.
 	openExternal: (url: string) => call("/api/open", { body: { url } }).catch(() => window.open(url, "_blank", "noopener")),

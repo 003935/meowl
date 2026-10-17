@@ -3,6 +3,7 @@ import { FolderOpenIcon, Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 import type { AppState } from "../../shared/types";
 import { api } from "@/lib/api";
+import logo from "@/assets/meowl.png";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,10 +16,9 @@ type Props = {
 	onCancel?: () => void;
 };
 
-// First run (or "Change archive"): pick the unzipped archive folder and a cutoff date.
+// First run (or "Change archive"): pick the unzipped archive folder.
 export function Setup({ state, onImported, onCancel }: Props) {
 	const [archivePath, setArchivePath] = useState(state.archivePath ?? "");
-	const [cutoff, setCutoff] = useState(state.cutoff);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -35,10 +35,8 @@ export function Setup({ state, onImported, onCancel }: Props) {
 		setBusy(true);
 		setError(null);
 		try {
-			const r = await api.importArchive(archivePath.trim(), cutoff);
-			toast.success(`Imported ${r.counts.tweets} tweets, ${r.counts.replies} replies, ${r.counts.retweets} retweets`, {
-				description: r.afterCutoff ? `${r.afterCutoff} posted on or after ${cutoff} were left out.` : undefined,
-			});
+			const r = await api.importArchive(archivePath.trim());
+			toast.success(`Imported ${r.counts.tweets} tweets, ${r.counts.replies} replies, ${r.counts.retweets} retweets`);
 			onImported();
 		} catch (e) {
 			setError((e as Error).message);
@@ -49,16 +47,23 @@ export function Setup({ state, onImported, onCancel }: Props) {
 
 	return (
 		<div className="grid min-h-dvh place-items-center p-6">
-			<Card className="w-full max-w-xl">
-				<CardHeader>
-					<CardTitle className="text-xl">Tweet Deleter</CardTitle>
-					<CardDescription>
-						Browse your X archive in three columns (tweets, replies, retweets), tick what you want gone, and bulk-delete it.
-						Download your archive from x.com → Settings → Your account → Download an archive, then unzip it.
+			<Card className="w-full max-w-xl [--card-spacing:--spacing(7)]">
+				<CardHeader className="gap-5">
+					<div className="flex items-center gap-3">
+						<img src={logo} alt="" className="h-10 w-auto" />
+						<CardTitle className="text-3xl font-bold tracking-tight">Meowl Delete</CardTitle>
+					</div>
+					<CardDescription className="grid gap-3 leading-relaxed">
+						<p>To delete your tweets, you'll need your X archive first:</p>
+						<ol className="ml-5 list-decimal space-y-2">
+							<li>On x.com, go to <b>Settings → Your account → Download an archive of your data</b> and request it.</li>
+							<li>X will let you know when it's ready (this can take a day or so). Download it and unzip it.</li>
+							<li>Pick the unzipped folder below, then tick the tweets you want gone.</li>
+						</ol>
 					</CardDescription>
 				</CardHeader>
-				<CardContent className="grid gap-5">
-					<div className="grid gap-2">
+				<CardContent className="grid gap-6">
+					<div className="grid gap-2.5">
 						<Label htmlFor="archive">Archive folder</Label>
 						<div className="flex gap-2">
 							<Input
@@ -73,11 +78,6 @@ export function Setup({ state, onImported, onCancel }: Props) {
 							</Button>
 						</div>
 					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="cutoff">Only list posts before</Label>
-						<Input id="cutoff" type="date" className="w-fit" value={cutoff} onChange={(e) => setCutoff(e.target.value)} />
-						<p className="text-xs text-muted-foreground">Anything posted on or after this date is left out of the lists, so it can't be ticked.</p>
-					</div>
 					{error && (
 						<Alert variant="destructive">
 							<AlertTitle>Couldn't import</AlertTitle>
@@ -87,7 +87,7 @@ export function Setup({ state, onImported, onCancel }: Props) {
 				</CardContent>
 				<CardFooter className="justify-end gap-2">
 					{onCancel && <Button variant="ghost" onClick={onCancel}>Cancel</Button>}
-					<Button onClick={importNow} disabled={busy || !archivePath.trim() || !cutoff}>
+					<Button onClick={importNow} disabled={busy || !archivePath.trim()}>
 						{busy && <Loader2Icon data-icon="inline-start" className="animate-spin" />}
 						{state.imported ? "Re-import" : "Import archive"}
 					</Button>

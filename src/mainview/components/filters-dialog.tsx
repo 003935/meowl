@@ -1,20 +1,22 @@
 import { useState, type ReactNode } from "react";
 import { XIcon } from "lucide-react";
 import { EMPTY_FILTERS, type Filters, type Presence } from "@/lib/filters";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { DateField } from "@/components/date-field";
+import { EngagementHistogram } from "@/components/engagement-histogram";
 
 type Props = {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	value: Filters;
 	onApply: (f: Filters) => void;
-	username?: string;
+	/** like and repost counts of every tweet, for the Engagement charts */
+	engagement: { likes: number[]; reposts: number[] };
 	minYear: number;
 	maxYear: number;
 };
@@ -28,39 +30,53 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 	);
 }
 
-function Field({ id, label, hint, ...input }: { id: string; label: string; hint: ReactNode } & React.ComponentProps<typeof Input>) {
+function Field({ id, label, hint, ...input }: { id: string; label: string; hint?: ReactNode } & React.ComponentProps<typeof Input>) {
 	return (
 		<div className="grid gap-1.5">
 			<Label htmlFor={id}>{label}</Label>
 			<Input id={id} spellCheck={false} autoComplete="off" {...input} />
-			<p className="text-xs text-muted-foreground">{hint}</p>
+			{hint && <p className="text-xs text-muted-foreground">{hint}</p>}
 		</div>
 	);
 }
 
+// "Only posts with …" / "Exclude posts with …" in the old radio-list layout, but
+// clicking the selected row again unselects it (= show posts with and without).
 function PresenceField({ label, noun, value, onChange }: { label: string; noun: string; value: Presence; onChange: (v: Presence) => void }) {
-	const options: [Presence, string][] = [
-		["all", `Include posts with and without ${noun}`],
+	const options: [Exclude<Presence, "all">, string][] = [
 		["only", `Only posts with ${noun}`],
 		["exclude", `Exclude posts with ${noun}`],
 	];
 	return (
 		<div className="grid gap-2">
 			<span className="text-sm font-medium">{label}</span>
-			<RadioGroup value={value} onValueChange={(v) => onChange(v as Presence)} className="gap-2">
-				{options.map(([v, text]) => (
-					<Label key={v} className="flex cursor-pointer items-center justify-between rounded-md px-1 py-1 font-normal hover:bg-muted/50">
-						{text}
-						<RadioGroupItem value={v} />
-					</Label>
-				))}
-			</RadioGroup>
+			<div className="grid gap-2">
+				{options.map(([v, text]) => {
+					const on = value === v;
+					return (
+						<button
+							key={v}
+							type="button"
+							role="checkbox"
+							aria-checked={on}
+							onClick={() => onChange(on ? "all" : v)}
+							className="flex items-center justify-between rounded-md px-1 py-1 text-left text-sm hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+						>
+							{text}
+							{/* looks like the radio it replaced */}
+							<span className={cn("relative size-4 shrink-0 rounded-full border border-input dark:bg-input/30", on && "border-primary bg-primary dark:bg-primary")}>
+								{on && <span className="absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-foreground" />}
+							</span>
+						</button>
+					);
+				})}
+			</div>
 		</div>
 	);
 }
 
 // Advanced filters, modelled on X's "Advanced search". Edits a draft; Apply commits it.
-export function FiltersDialog({ open, onOpenChange, value, onApply, username, minYear, maxYear }: Props) {
+export function FiltersDialog({ open, onOpenChange, value, onApply, engagement, minYear, maxYear }: Props) {
 	const [draft, setDraft] = useState(value);
 	const [wasOpen, setWasOpen] = useState(open);
 	if (open !== wasOpen) {
@@ -72,13 +88,6 @@ export function FiltersDialog({ open, onOpenChange, value, onApply, username, mi
 		value: draft[key],
 		onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft((d) => ({ ...d, [key]: e.target.value })),
 	});
-	const number = (key: "minLikes" | "minReposts") => ({
-		...text(key),
-		type: "number",
-		min: 0,
-		inputMode: "numeric" as const,
-	});
-
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent showCloseButton={false} className="flex max-h-[90dvh] flex-col gap-0 p-0 sm:max-w-xl">
@@ -87,27 +96,15 @@ export function FiltersDialog({ open, onOpenChange, value, onApply, username, mi
 						<Button variant="ghost" size="icon" aria-label="Close"><XIcon /></Button>
 					</DialogClose>
 					<DialogTitle className="flex-1 text-xl font-bold">Filters</DialogTitle>
-					<DialogDescription className="sr-only">Narrow the three columns by words, accounts, links and media, engagement and dates.</DialogDescription>
+					<DialogDescription className="sr-only">Narrow the three columns by words, links and media, engagement and dates.</DialogDescription>
 					<Button variant="ghost" onClick={() => setDraft(EMPTY_FILTERS)}>Reset</Button>
 					<Button className="rounded-full px-4" onClick={() => { onApply(draft); onOpenChange(false); }}>Apply</Button>
 				</div>
 
 				<form className="overflow-y-auto" onSubmit={(e) => { e.preventDefault(); onApply(draft); onOpenChange(false); }}>
 					<Section title="Words">
-						<Field id="f-all" label="All of these words" hint="Example: what's happening · contains both “what's” and “happening”" {...text("allWords")} />
-						<Field id="f-exact" label="This exact phrase" hint="Example: happy hour · contains the exact phrase “happy hour”" {...text("exactPhrase")} />
-						<Field id="f-any" label="Any of these words" hint="Example: cats dogs · contains either “cats” or “dogs” (or both)" {...text("anyWords")} />
-						<Field id="f-none" label="None of these words" hint="Example: cats dogs · does not contain “cats” and does not contain “dogs”" {...text("noneWords")} />
-						<Field id="f-tags" label="These hashtags" hint="Example: #ThrowbackThursday · contains the hashtag #ThrowbackThursday" {...text("hashtags")} />
-					</Section>
-					<Separator />
-					<Section title="Accounts">
-						<Field
-							id="f-from" label="From these accounts" {...text("fromAccounts")}
-							hint={<>Example: @X · posted by @X. Your own posts are from {username ? `@${username}` : "you (re-import the archive to match them by handle)"}; a retweet is from the account it reposted.</>}
-						/>
-						<Field id="f-to" label="To these accounts" hint="Example: @X · sent in reply to @X" {...text("toAccounts")} />
-						<Field id="f-mention" label="Mentioning these accounts" hint="Example: @SFBART @Caltrain · mentions @SFBART or mentions @Caltrain" {...text("mentioning")} />
+						<Field id="f-include" label="Include" placeholder={'"exact phrase", word, #tag, @account'} hint="Tweets must contain all of these. Comma separated." {...text("include")} />
+						<Field id="f-exclude" label="Exclude" placeholder={'"exact phrase", word, #tag, @account'} hint="Hide tweets containing any of these. Comma separated." {...text("exclude")} />
 					</Section>
 					<Separator />
 					<Section title="Filters">
@@ -116,9 +113,18 @@ export function FiltersDialog({ open, onOpenChange, value, onApply, username, mi
 					</Section>
 					<Separator />
 					<Section title="Engagement">
-						<Field id="f-likes" label="Minimum Likes" hint="Example: 280 · posts with at least 280 Likes" {...number("minLikes")} />
-						<Field id="f-reposts" label="Minimum reposts" hint="Example: 280 · posts with at least 280 reposts" {...number("minReposts")} />
-						<p className="-mt-2 text-xs text-muted-foreground">Your X archive doesn't record reply counts, so there's no minimum-replies filter.</p>
+						<EngagementHistogram
+							id="f-likes" title="Likes" noun="likes" values={engagement.likes}
+							barClass="fill-[#db2777] dark:fill-[#ec4899]"
+							min={draft.minLikes} max={draft.maxLikes}
+							onChange={(minLikes, maxLikes) => setDraft((d) => ({ ...d, minLikes, maxLikes }))}
+						/>
+						<EngagementHistogram
+							id="f-reposts" title="Reposts" noun="reposts" values={engagement.reposts}
+							barClass="fill-[#0284c7] dark:fill-[#3b82f6]"
+							min={draft.minReposts} max={draft.maxReposts}
+							onChange={(minReposts, maxReposts) => setDraft((d) => ({ ...d, minReposts, maxReposts }))}
+						/>
 					</Section>
 					<Separator />
 					<Section title="Dates">

@@ -10,7 +10,8 @@ const CYCLETLS_BIN =
 
 export default {
 	app: {
-		name: "Tweet Deleter",
+		name: "Meowl Delete",
+		// Kept from the old name: the per-user data folder (ticks, deletion log) is keyed on it.
 		identifier: "dev.tweetdeleter.app",
 		version: "2.0.0",
 		description: "Browse your X archive and bulk-delete old tweets, replies and retweets",
@@ -30,8 +31,8 @@ export default {
 			[`node_modules/cycletls/dist/${CYCLETLS_BIN}`]: `cycletls/${CYCLETLS_BIN}`,
 		},
 		watchIgnore: ["dist/**"],
-		mac: { bundleCEF: false },
-		linux: { bundleCEF: false },
-		win: { bundleCEF: false },
+		mac: { bundleCEF: false, icons: "assets/icon.iconset" },
+		linux: { bundleCEF: false, icon: "assets/icon.png" },
+		win: { bundleCEF: false, icon: "assets/icon.ico" },
 	},
 } satisfies ElectrobunConfig;

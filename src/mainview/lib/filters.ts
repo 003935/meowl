@@ -2,37 +2,29 @@ import type { Tweet } from "../../shared/types";
 
 export type Presence = "all" | "only" | "exclude";
 
-// Mirrors X's advanced search, limited to what the archive records.
+// Loosely modelled on X's advanced search, limited to what the archive records.
 export type Filters = {
-	allWords: string;
-	exactPhrase: string;
-	anyWords: string;
-	noneWords: string;
-	hashtags: string;
-	fromAccounts: string;
-	toAccounts: string;
-	mentioning: string;
+	include: string; // comma-separated words / phrases / #tags / @names; all must appear
+	exclude: string; // comma-separated; none may appear
 	links: Presence;
 	media: Presence;
 	minLikes: string;
+	maxLikes: string; // "" = no upper limit
 	minReposts: string;
+	maxReposts: string;
 	since: string; // YYYY-MM-DD, inclusive
 	until: string; // YYYY-MM-DD, inclusive
 };
 
 export const EMPTY_FILTERS: Filters = {
-	allWords: "",
-	exactPhrase: "",
-	anyWords: "",
-	noneWords: "",
-	hashtags: "",
-	fromAccounts: "",
-	toAccounts: "",
-	mentioning: "",
+	include: "",
+	exclude: "",
 	links: "all",
 	media: "all",
 	minLikes: "",
+	maxLikes: "",
 	minReposts: "",
+	maxReposts: "",
 	since: "",
 	until: "",
 };
@@ -41,57 +33,45 @@ export const EMPTY_FILTERS: Filters = {
 export const activeFilterCount = (f: Filters) =>
 	(Object.keys(EMPTY_FILTERS) as (keyof Filters)[]).filter((k) => f[k].trim() !== EMPTY_FILTERS[k]).length;
 
-// "cats, #Dogs @x" → ["cats", "dogs", "x"]
-const words = (s: string) =>
-	s.toLowerCase().split(/[\s,]+/).map((w) => w.replace(/^[#@]+/, "")).filter(Boolean);
+// 'cats, happy hour, "#Dogs"' → ["cats", "happy hour", "#dogs"]: comma-separated, quotes optional
+const terms = (s: string) =>
+	s.toLowerCase().split(",").map((t) => t.trim().replace(/^"(.*)"$/, "$1").trim()).filter(Boolean);
 
 const unescape = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
 // date inputs are "YYYY-MM-DD"; interpret in local time to match the dates shown
 const dayStart = (d: string) => new Date(`${d}T00:00:00`).getTime();
 
-/**
- * Build a predicate for `f` plus the header's quick search. `username` is the
- * archive owner's handle, used for "From these accounts" on their own posts.
- */
-export function makeMatcher(f: Filters, quick: string, username?: string) {
-	const all = words(f.allWords);
-	const any = words(f.anyWords);
-	const none = words(f.noneWords);
-	const tags = words(f.hashtags);
-	const from = new Set(words(f.fromAccounts));
-	const to = new Set(words(f.toAccounts));
-	const mentioning = words(f.mentioning);
-	const phrase = f.exactPhrase.trim().toLowerCase();
+/** Build a predicate for `f` plus the header's quick search. */
+export function makeMatcher(f: Filters, quick: string) {
+	const include = terms(f.include);
+	const exclude = terms(f.exclude);
 	const q = quick.trim().toLowerCase();
 	const minLikes = Number(f.minLikes) || 0;
 	const minReposts = Number(f.minReposts) || 0;
+	const maxLikes = f.maxLikes === "" ? Infinity : Number(f.maxLikes);
+	const maxReposts = f.maxReposts === "" ? Infinity : Number(f.maxReposts);
 	const lo = f.since ? dayStart(f.since) : -Infinity;
 	const hi = f.until ? dayStart(f.until) + 86_400_000 : Infinity;
-	const me = username?.toLowerCase();
 
 	return (t: Tweet) => {
 		if (t.ts < lo || t.ts >= hi) return false;
-		if (t.likes < minLikes || t.retweets_count < minReposts) return false;
+		if (t.likes < minLikes || t.likes > maxLikes) return false;
+		if (t.retweets_count < minReposts || t.retweets_count > maxReposts) return false;
 		if (f.links === "only" ? !t.urls.length : f.links === "exclude" && t.urls.length) return false;
 		if (f.media === "only" ? !t.media.length : f.media === "exclude" && t.media.length) return false;
 
 		const text = unescape(t.text).toLowerCase();
 		if (q && !text.includes(q)) return false;
-		if (phrase && !text.includes(phrase)) return false;
 
 		const tokens: string[] = text.match(/[#@]?[\p{L}\p{N}_']+/gu) ?? [];
 		const plain = new Set(tokens.map((w) => w.replace(/^[#@]/, "")));
-		if (!all.every((w) => plain.has(w))) return false;
-		if (any.length && !any.some((w) => plain.has(w))) return false;
-		if (none.some((w) => plain.has(w))) return false;
-		if (tags.length && !tags.every((w) => tokens.includes(`#${w}`))) return false;
-		if (mentioning.length && !mentioning.some((w) => tokens.includes(`@${w}`))) return false;
-
-		// a retweet is "from" the account it reposted; everything else is the archive owner's
-		const author = (t.rt_of ?? me)?.toLowerCase();
-		if (from.size && !(author && from.has(author))) return false;
-		if (to.size && !(t.reply_to && to.has(t.reply_to.toLowerCase()))) return false;
+		// a phrase matches as typed, "#tag" / "@name" only as that tag or mention, a word as a whole word
+		// (replies start with "@whoever", so "@whoever" also finds replies to them)
+		const has = (term: string) =>
+			/\s/.test(term) ? text.includes(term) : /^[#@]/.test(term) ? tokens.includes(term) : plain.has(term);
+		if (!include.every(has)) return false;
+		if (exclude.some(has)) return false;
 		return true;
 	};
 }

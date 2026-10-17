@@ -42,7 +42,7 @@ async function mainViewUrl() {
 }
 
 new BrowserWindow({
-	title: "Tweet Deleter",
+	title: "Meowl Delete",
 	url: await mainViewUrl(),
 	frame: { width: 1400, height: 900, x: 120, y: 80 },
 });

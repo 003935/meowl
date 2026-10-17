@@ -1,19 +1,22 @@
 // Local server inside the desktop app: serves the UI and the archive's media,
 // persists the delete selection, and runs deletions.
-//   GET  /api/state      -> archive path, cutoff, whether it's imported, counts
+//   GET  /api/state      -> archive path, whether it's imported, counts
 //   POST /api/pick       -> opens a native folder picker, returns {path}
-//   POST /api/import     <- {archivePath, cutoff}  parse the archive into tweets.json
+//   POST /api/import     <- {archivePath}  parse the archive into tweets.json
 //   GET  /api/tweets     -> { tweets, replies, retweets }
 //   GET  /api/selection  -> ticked ids          POST <- ticked ids
 //   GET  /api/deleted    -> ids already deleted
-//   POST /api/delete     <- {token}  start deleting every ticked id
+//   POST /api/delete     <- {token} or {useSaved: true}  start deleting every ticked id
+//   GET  /api/token      -> {saved}  whether an accepted token is remembered this session
+//   POST /api/token/forget  drop the remembered token
 //   POST /api/stop       stop the running deletion after the current tweet
 //   GET  /api/progress   -> state of the current/last deletion run
 //   POST /api/open       <- {url}  open an x.com / https link in the default browser
 //   GET  /media/<file>   -> a file from the archive's data/tweets_media
 //
-// The auth token is only held in memory for the duration of a run; it is never
-// written to disk or sent anywhere except X.
+// The auth token is never written to disk or sent anywhere except X. Once X accepts
+// it, it's remembered in this process's memory until the app quits, so later runs
+// don't ask again; the UI only ever learns whether one is saved, never the token.
 import fs from "node:fs";
 import path from "node:path";
 import { runDeletion, pendingIds } from "./deleter";
@@ -35,22 +38,39 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 	// ---- deletion job state (one run at a time) ----
 	let job: Progress = { running: false, total: 0, done: 0, ok: 0, fail: 0, waiting: 0, stopping: false, error: null, log: [] };
 	let stopRequested = false;
+	let savedToken: string | null = null;
 
 	function logLine(s: string) {
 		job.log.push(`${new Date().toLocaleTimeString()}  ${s}`);
 		if (job.log.length > 100) job.log.shift();
 	}
 
-	function startJob(token: string) {
+	const idleJob = (): Progress => ({ running: false, total: 0, done: 0, ok: 0, fail: 0, waiting: 0, stopping: false, error: null, log: [] });
+
+	/**
+	 * Start a run. Resolves once X has accepted the token (the run then carries on in
+	 * the background); rejects with a readable message if logging in fails, in which
+	 * case no run is shown, so the UI can just ask for the token again.
+	 */
+	function startJob(token: string): Promise<void> {
 		stopRequested = false;
-		job = { running: true, total: pendingIds(store).length, done: 0, ok: 0, fail: 0, waiting: 0, stopping: false, error: null, log: [] };
+		job = { ...idleJob(), running: true, total: pendingIds(store).length };
 		logLine("Logging in…");
+		let loggedIn = false;
+		let settle!: { ok: () => void; fail: (msg: string) => void };
+		const login = new Promise<void>((ok, fail) => (settle = { ok, fail: (msg) => fail(new Error(msg)) }));
 		runDeletion({
 			store,
 			token,
 			shouldStop: () => stopRequested,
 			onEvent: (e) => {
-				if (e.type === "start") { job.total = e.total; logLine(`Logged in. Deleting ${e.total}…`); }
+				if (e.type === "start") {
+					loggedIn = true;
+					savedToken = token;
+					job.total = e.total;
+					logLine(`Logged in. Deleting ${e.total}…`);
+					settle.ok();
+				}
 				if (e.type === "ok") { job.done = e.n; job.ok++; job.waiting = 0; logLine(`deleted ${e.id}`); }
 				if (e.type === "fail") { job.done = e.n; job.fail++; job.waiting = 0; logLine(`FAILED ${e.id}: ${e.msg}`); }
 				if (e.type === "wait") { job.waiting = e.seconds; logLine(`rate limited — waiting ${e.seconds}s`); }
@@ -59,12 +79,18 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 		})
 			.catch((err) => {
 				const msg = String(err?.message || err);
-				job.error = /failed to log in/i.test(msg)
-					? "X rejected that auth_token — copy it again from your x.com cookies (it changes when you log out)."
-					: msg;
-				logLine(`Error: ${job.error}`);
+				if (!loggedIn) {
+					const rejected = /failed to log in/i.test(msg);
+					if (rejected && token === savedToken) savedToken = null; // expired, or logged out of X since
+					job = idleJob();
+					settle.fail(rejected ? "X didn't accept that auth_token. Paste the correct one and try again." : `Couldn't log in to X: ${msg}`);
+					return;
+				}
+				job.error = msg;
+				logLine(`Error: ${msg}`);
 			})
 			.finally(() => { job.running = false; job.stopping = false; job.waiting = 0; });
+		return login;
 	}
 
 	function appState(): AppState {
@@ -116,7 +142,7 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 		const server = Bun.serve({
 			hostname: "127.0.0.1",
 			port,
-			idleTimeout: 60,
+			idleTimeout: 255, // seconds; /api/delete waits for X to accept the login
 			async fetch(req) {
 				const url = new URL(req.url);
 
@@ -136,10 +162,9 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 						if (job.running) return json({ error: "Wait for the running deletion to finish first." }, 409);
 						const body = await readJson(req, 10_000);
 						const archivePath = String(body?.archivePath || "").trim();
-						const cutoff = String(body?.cutoff || "").trim();
 						if (!archivePath) return json({ error: "Choose your archive folder first." }, 400);
-						const result = importArchive(store, archivePath, cutoff);
-						store.saveSettings({ archivePath, cutoff, username: result.username });
+						const result = importArchive(store, archivePath);
+						store.saveSettings({ archivePath });
 						return json(result);
 					}
 
@@ -163,12 +188,19 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 					if (p === "/api/delete" && req.method === "POST") {
 						if (job.running) return json({ error: "A deletion is already running." }, 409);
 						const body = await readJson(req, 10_000);
-						const token = String(body?.token || "").trim();
+						const token = body?.useSaved ? savedToken ?? "" : String(body?.token || "").trim();
+						if (body?.useSaved && !token) return json({ error: "No saved auth_token — paste it again." }, 400);
 						if (!/^[A-Za-z0-9]{20,}$/.test(token)) return json({ error: "That doesn't look like an auth_token (should be a long hex string)." }, 400);
 						if (!pendingIds(store).length) return json({ error: "Nothing is ticked." }, 400);
-						startJob(token);
+						try {
+							await startJob(token); // wait for X to accept the login
+						} catch (e) {
+							return json({ error: (e as Error).message, tokenSaved: !!savedToken }, 401);
+						}
 						return json({ started: true }, 202);
 					}
+					if (p === "/api/token") return json({ saved: !!savedToken });
+					if (p === "/api/token/forget" && req.method === "POST") { savedToken = null; return json({ saved: false }); }
 					if (p === "/api/stop" && req.method === "POST") {
 						if (job.running) { stopRequested = true; job.stopping = true; logLine("Stopping after current tweet…"); }
 						return json({ stopping: job.running });

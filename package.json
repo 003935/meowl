@@ -1,5 +1,5 @@
 {
-  "name": "tweet-deleter",
+  "name": "meowl-delete",
   "version": "2.0.0",
   "description": "Browse your Twitter/X archive and bulk-delete old tweets, replies and retweets",
   "license": "AGPL-3.0-only",

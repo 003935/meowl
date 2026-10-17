@@ -1,7 +1,7 @@
 // Where the app keeps its files. The desktop app uses its per-user data folder;
 // the command-line scripts pass the same folder in (see delete-selected.ts).
 //
-//   settings.json  archive path + cutoff date
+//   settings.json  archive path
 //   tweets.json    parsed archive ({ tweets, replies, retweets })
 //   selected.json  ticked ids
 //   deleted.json   ids already deleted (resume log)
@@ -10,8 +10,6 @@ import path from "node:path";
 import type { Settings } from "../shared/types";
 
 export type Store = ReturnType<typeof openStore>;
-
-export const DEFAULT_CUTOFF = "2024-01-01";
 
 export function openStore(dir: string) {
 	fs.mkdirSync(dir, { recursive: true });
@@ -30,7 +28,7 @@ export function openStore(dir: string) {
 		TWEETS: file("tweets.json"),
 		readIds: (name: "selected.json" | "deleted.json") => readJson<string[]>(name, []),
 		writeIds: (name: "selected.json" | "deleted.json", ids: string[]) => writeJson(name, ids),
-		settings: (): Settings => ({ cutoff: DEFAULT_CUTOFF, ...readJson<Partial<Settings>>("settings.json", {}) }),
+		settings: (): Settings => readJson<Settings>("settings.json", {}),
 		saveSettings: (s: Settings) => writeJson("settings.json", s),
 	};
 }

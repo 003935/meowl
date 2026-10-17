@@ -19,8 +19,6 @@ export type Archive = Record<Kind, Tweet[]>;
 
 export type Settings = {
 	archivePath?: string;
-	cutoff: string; // YYYY-MM-DD; only tweets strictly before this are listed
-	username?: string; // the archive owner's @handle (from account.js)
 };
 
 export type AppState = Settings & {
@@ -30,9 +28,7 @@ export type AppState = Settings & {
 };
 
 export type ImportResult = {
-	username?: string;
 	total: number;
-	afterCutoff: number;
 	counts: Record<Kind, number>;
 };
 

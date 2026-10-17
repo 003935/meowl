@@ -4,6 +4,9 @@ import "./index.css";
 import App from "./App";
 import { Toaster } from "@/components/ui/sonner";
 import { api } from "@/lib/api";
+import { installZoom } from "@/lib/zoom";
+
+installZoom();
 
 // Follow the system light/dark setting.
 const dark = window.matchMedia("(prefers-color-scheme: dark)");

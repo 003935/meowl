@@ -17,6 +17,8 @@ export default defineConfig({
 	build: {
 		outDir: "../../dist",
 		emptyOutDir: true,
+		// Loaded from disk inside the desktop app, so bundle size isn't a network cost.
+		chunkSizeWarningLimit: 2000,
 	},
 	server: {
 		port: 5173,

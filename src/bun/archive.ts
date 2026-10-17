@@ -1,4 +1,4 @@
-// Parse the Twitter archive's tweets.js into three lists posted before the cutoff:
+// Parse the Twitter archive's tweets.js into three lists:
 //   tweets   — standalone posts + self-reply threads
 //   replies  — replies to other people
 //   retweets — "RT @…" entries
@@ -36,16 +36,14 @@ export function checkArchive(archivePath: string) {
 	}
 }
 
-export function importArchive(store: Store, archivePath: string, cutoffDate: string): ImportResult {
+export function importArchive(store: Store, archivePath: string): ImportResult {
 	checkArchive(archivePath);
 	const DATA = path.join(archivePath, "data");
 
-	const CUTOFF = new Date(`${cutoffDate}T00:00:00Z`); // keep tweets strictly before this
-	if (isNaN(+CUTOFF)) throw new Error(`Bad cutoff date "${cutoffDate}" (expected YYYY-MM-DD)`);
 
 	// Your own account id, read from the archive — self-reply threads count as tweets.
 	const account = fs.existsSync(path.join(DATA, "account.js"))
-		? readYtd<{ account: { accountId: string; username?: string } }>(path.join(DATA, "account.js"))[0]?.account
+		? readYtd<{ account: { accountId: string } }>(path.join(DATA, "account.js"))[0]?.account
 		: undefined;
 	const SELF = account?.accountId;
 
@@ -64,11 +62,9 @@ export function importArchive(store: Store, archivePath: string, cutoffDate: str
 	}
 
 	// 3) Filter + shape.
-	let afterCutoff = 0;
 	const out: Archive = { tweets: [], replies: [], retweets: [] };
 	for (const { tweet: t } of entries) {
 		const created = new Date(t.created_at);
-		if (!(created < CUTOFF)) { afterCutoff++; continue; }
 
 		const text = t.full_text || "";
 		const isRetweet = text.startsWith("RT @");
@@ -93,9 +89,7 @@ export function importArchive(store: Store, archivePath: string, cutoffDate: str
 
 	fs.writeFileSync(store.TWEETS, JSON.stringify(out));
 	return {
-		username: account?.username,
 		total: entries.length,
-		afterCutoff,
 		counts: { tweets: out.tweets.length, replies: out.replies.length, retweets: out.retweets.length },
 	};
 }
