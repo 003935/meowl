@@ -11,5 +11,5 @@
     "noEmit": true,
     "strict": true
   },
-  "include": ["src/bun", "src/shared", "delete-selected.ts", "test-delete.ts"]
+  "include": ["src/bun", "src/shared", "src/**/*.test.ts", "delete-selected.ts", "test-delete.ts"]
 }

@@ -1,27 +1,18 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { FolderCogIcon, Loader2Icon, PanelTopCloseIcon, PanelTopOpenIcon, SearchIcon } from "lucide-react";
+import { FolderCogIcon, ListChecksIcon, Loader2Icon, PanelTopCloseIcon, PanelTopOpenIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import type { AppState, Archive, Kind, Progress } from "../../shared/types";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TweetColumn } from "@/components/tweet-column";
 import { DeletePanel } from "@/components/delete-panel";
 import { useConfirm } from "@/components/confirm-dialog";
-
-const KINDS: { kind: Kind; title: string }[] = [
-	{ kind: "tweets", title: "Tweets" },
-	{ kind: "replies", title: "Replies" },
-	{ kind: "retweets", title: "Retweets" },
-];
-
-// date inputs are "YYYY-MM-DD"; interpret in local time to match the dates shown
-const isoDay = (ts: number) => {
-	const d = new Date(ts);
-	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+import { FiltersDialog } from "@/components/filters-dialog";
+import { ReviewSheet } from "@/components/review-sheet";
+import { SortMenu, type Order } from "@/components/sort-menu";
+import { KINDS } from "@/lib/kinds";
+import { EMPTY_FILTERS, activeFilterCount, makeMatcher, type Filters } from "@/lib/filters";
 
 const PANEL_KEY = "delPanelHidden";
 const readPanelHidden = () => {
@@ -35,9 +26,10 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 	const [deleted, setDeleted] = useState<Set<string>>(new Set());
 	const [saveState, setSaveState] = useState("saved");
 	const [query, setQuery] = useState("");
-	const [order, setOrder] = useState<"asc" | "desc">("asc");
-	const [from, setFrom] = useState("");
-	const [to, setTo] = useState("");
+	const [order, setOrder] = useState<Order>("asc");
+	const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+	const [filtersOpen, setFiltersOpen] = useState(false);
+	const [reviewOpen, setReviewOpen] = useState(false);
 	const [panelHidden, setPanelHidden] = useState(readPanelHidden);
 	const [job, setJob] = useState<Progress | null>(null);
 	const [startError, setStartError] = useState<string | null>(null);
@@ -80,30 +72,29 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 	}, []);
 
 	// ---- filtering ----
-	const term = useDeferredValue(query.trim().toLowerCase());
+	const term = useDeferredValue(query);
 	const lists = useMemo(() => {
 		const out = { tweets: [], replies: [], retweets: [] } as Archive;
 		if (!data) return out;
-		const lo = from ? new Date(`${from}T00:00:00`).getTime() : -Infinity;
-		const hi = to ? new Date(`${to}T00:00:00`).getTime() + 86_400_000 : Infinity; // inclusive end day
+		const matches = makeMatcher(filters, term, state.username);
 		for (const { kind } of KINDS) {
-			out[kind] = data[kind]
-				.filter((t) => t.ts >= lo && t.ts < hi && (!term || t.text.toLowerCase().includes(term)))
-				.sort((a, b) => (order === "asc" ? a.ts - b.ts : b.ts - a.ts));
+			out[kind] = data[kind].filter(matches).sort((a, b) => (order === "asc" ? a.ts - b.ts : b.ts - a.ts));
 		}
 		return out;
-	}, [data, term, order, from, to]);
+	}, [data, term, order, filters, state.username]);
+	const filterCount = activeFilterCount(filters);
 
-	const range = useMemo(() => {
+	// year range of the archive, for the date pickers
+	const years = useMemo(() => {
 		let min = Infinity, max = -Infinity;
 		for (const list of Object.values(data ?? {})) for (const t of list) { if (t.ts < min) min = t.ts; if (t.ts > max) max = t.ts; }
-		return min <= max ? { min: isoDay(min), max: isoDay(max) } : {};
+		const now = new Date().getFullYear();
+		return min <= max ? { min: new Date(min).getFullYear(), max: new Date(max).getFullYear() } : { min: 2006, max: now };
 	}, [data]);
 
-	function setDates(f: string, t: string) {
-		if (f && t && f > t) [f, t] = [t, f];
-		setFrom(f);
-		setTo(t);
+	function applyFilters(f: Filters) {
+		if (f.since && f.until && f.since > f.until) f = { ...f, since: f.until, until: f.since };
+		setFilters(f);
 	}
 
 	// ---- ticking ----
@@ -218,24 +209,24 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 					<SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input type="search" className="pl-8" placeholder="Search all columns…" value={query} onChange={(e) => setQuery(e.target.value)} />
 				</div>
-				<Select value={order} onValueChange={(v) => setOrder(v as "asc" | "desc")}>
-					<SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-					<SelectContent>
-						<SelectItem value="asc">Oldest first</SelectItem>
-						<SelectItem value="desc">Newest first</SelectItem>
-					</SelectContent>
-				</Select>
-				<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-					From
-					<Input type="date" aria-label="From date" className={cn("w-fit", from && "border-ring")} min={range.min} max={range.max} value={from} onChange={(e) => setDates(e.target.value, to)} />
-					to
-					<Input type="date" aria-label="To date" className={cn("w-fit", to && "border-ring")} min={range.min} max={range.max} value={to} onChange={(e) => setDates(from, e.target.value)} />
-					<Button size="sm" variant="ghost" disabled={!from && !to} onClick={() => setDates("", "")}>All dates</Button>
+				<div className="flex items-center">
+					<Button size="sm" variant={filterCount ? "default" : "secondary"} className="rounded-full" onClick={() => setFiltersOpen(true)}>
+						<SlidersHorizontalIcon data-icon="inline-start" /> Filters
+						{filterCount > 0 && <Badge variant="secondary" className="ml-0.5 h-4 min-w-4 px-1 tabular-nums">{filterCount}</Badge>}
+					</Button>
+					{filterCount > 0 && (
+						<Button size="icon-sm" variant="ghost" aria-label="Clear filters" title="Clear filters" onClick={() => setFilters(EMPTY_FILTERS)}>
+							<XIcon />
+						</Button>
+					)}
 				</div>
-				<div className="flex items-center gap-2 text-xs text-muted-foreground">
-					<Badge variant={selected.size ? "destructive" : "secondary"}>{selected.size.toLocaleString()}</Badge>
-					marked for deletion · {saveState}
-				</div>
+				<SortMenu value={order} onChange={setOrder} />
+				<Button size="sm" variant="ghost" onClick={() => setReviewOpen(true)} title="Review what's marked for deletion">
+					<ListChecksIcon data-icon="inline-start" />
+					<Badge variant={selected.size ? "destructive" : "secondary"} className="tabular-nums">{selected.size.toLocaleString()}</Badge>
+					marked
+					<span className="text-xs font-normal text-muted-foreground">· {saveState}</span>
+				</Button>
 				<Button size="sm" variant="outline" onClick={togglePanel} aria-expanded={!panelHidden}>
 					{panelHidden ? <PanelTopOpenIcon data-icon="inline-start" /> : <PanelTopCloseIcon data-icon="inline-start" />}
 					{panelHidden ? `Show delete panel${running ? " (deleting…)" : ""}` : "Hide delete panel"}
@@ -257,10 +248,11 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 			)}
 
 			<div className="grid min-h-0 flex-1 grid-rows-3 lg:grid-cols-3 lg:grid-rows-1">
-				{KINDS.map(({ kind, title }) => (
+				{KINDS.map(({ kind, title, Icon }) => (
 					<TweetColumn
 						key={kind}
 						title={title}
+						Icon={Icon}
 						list={lists[kind]}
 						selected={selected}
 						deleted={deleted}
@@ -270,6 +262,27 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 					/>
 				))}
 			</div>
+			<FiltersDialog
+				open={filtersOpen}
+				onOpenChange={setFiltersOpen}
+				value={filters}
+				onApply={applyFilters}
+				username={state.username}
+				minYear={years.min}
+				maxYear={years.max}
+			/>
+			<ReviewSheet
+				open={reviewOpen}
+				onOpenChange={setReviewOpen}
+				data={data}
+				selected={selected}
+				onToggle={(id) => update((s) => (s.has(id) ? s.delete(id) : s.add(id)))}
+				onClear={async () => {
+					if (await confirm({ title: `Untick all ${selected.size.toLocaleString()}?`, description: "Nothing will be marked for deletion.", confirm: "Untick all" })) {
+						update((s) => s.clear());
+					}
+				}}
+			/>
 			{confirmDialog}
 		</div>
 	);

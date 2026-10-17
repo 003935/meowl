@@ -89,6 +89,7 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 
 	// Serve a file, with Range support so videos can seek.
 	async function sendFile(req: Request, base: string, rel: string) {
+		base = path.resolve(base); // normalise separators so the escape check below compares like with like
 		const file = path.join(base, rel);
 		if (!file.startsWith(base + path.sep)) return new Response(null, { status: 403 });
 		const f = Bun.file(file);
@@ -138,7 +139,7 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 						const cutoff = String(body?.cutoff || "").trim();
 						if (!archivePath) return json({ error: "Choose your archive folder first." }, 400);
 						const result = importArchive(store, archivePath, cutoff);
-						store.saveSettings({ archivePath, cutoff });
+						store.saveSettings({ archivePath, cutoff, username: result.username });
 						return json(result);
 					}
 

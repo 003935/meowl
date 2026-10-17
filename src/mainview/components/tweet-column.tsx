@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import type { Tweet } from "../../shared/types";
 import { Button } from "@/components/ui/button";
 import { TweetCard } from "@/components/tweet-card";
@@ -7,6 +8,7 @@ const CHUNK = 150;
 
 type Props = {
 	title: string;
+	Icon: LucideIcon;
 	list: Tweet[]; // already filtered + sorted
 	selected: Set<string>;
 	deleted: Set<string>;
@@ -16,7 +18,7 @@ type Props = {
 };
 
 // One column, rendered CHUNK tweets at a time as you scroll.
-export function TweetColumn({ title, list, selected, deleted, onToggle, onTickAll, onUntickAll }: Props) {
+export function TweetColumn({ title, Icon, list, selected, deleted, onToggle, onTickAll, onUntickAll }: Props) {
 	const [shown, setShown] = useState(CHUNK);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);
@@ -42,7 +44,8 @@ export function TweetColumn({ title, list, selected, deleted, onToggle, onTickAl
 	return (
 		<section className="flex min-h-0 min-w-0 flex-col border-b lg:border-r lg:border-b-0 lg:last:border-r-0">
 			<div className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
-				<h2 className="flex-1 text-sm font-semibold">
+				<h2 className="flex flex-1 items-center gap-2 text-sm font-semibold">
+					<Icon className="size-4 text-muted-foreground" aria-hidden />
 					{title} <span className="font-normal text-muted-foreground">({list.length.toLocaleString()})</span>
 				</h2>
 				<Button size="xs" variant="outline" onClick={onTickAll} disabled={!list.length}>Tick all shown</Button>

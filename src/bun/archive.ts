@@ -44,9 +44,10 @@ export function importArchive(store: Store, archivePath: string, cutoffDate: str
 	if (isNaN(+CUTOFF)) throw new Error(`Bad cutoff date "${cutoffDate}" (expected YYYY-MM-DD)`);
 
 	// Your own account id, read from the archive — self-reply threads count as tweets.
-	const SELF = fs.existsSync(path.join(DATA, "account.js"))
-		? readYtd<{ account: { accountId: string } }>(path.join(DATA, "account.js"))[0]?.account.accountId
+	const account = fs.existsSync(path.join(DATA, "account.js"))
+		? readYtd<{ account: { accountId: string; username?: string } }>(path.join(DATA, "account.js"))[0]?.account
 		: undefined;
+	const SELF = account?.accountId;
 
 	// 1) Load tweets.js (large archives split the rest into tweets-part1.js, …).
 	const parts = fs.readdirSync(DATA).filter((f) => /^tweets(-part\d+)?\.js$/.test(f));
@@ -92,6 +93,7 @@ export function importArchive(store: Store, archivePath: string, cutoffDate: str
 
 	fs.writeFileSync(store.TWEETS, JSON.stringify(out));
 	return {
+		username: account?.username,
 		total: entries.length,
 		afterCutoff,
 		counts: { tweets: out.tweets.length, replies: out.replies.length, retweets: out.retweets.length },
