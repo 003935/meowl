@@ -1,6 +1,6 @@
-# Meowl Delete
 
 <p align="center">
+  <h1> Meowl Delete </h1>
   <img src="assets/icon.png" alt="Meowl Delete" width="128">
 </p>
 
