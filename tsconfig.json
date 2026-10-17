@@ -1,0 +1,9 @@
+{
+  // Editor/shadcn entry point. The UI and the Bun main process are checked
+  // separately: `bun run typecheck`.
+  "files": [],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/mainview/*"] }
+  }
+}

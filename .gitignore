@@ -1,9 +1,16 @@
 node_modules/
+.hutch/
+dist/
+build/
+artifacts/
+*.tsbuildinfo
 
-# personal data — never commit
+# personal data — never commit (the app keeps these in its own data folder now,
+# but older checkouts kept them here)
 local.config.json
 tweets.json
 selected.json
 deleted.json
 backups/
 .env
+.cottontail-tmp/
