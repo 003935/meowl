@@ -1,9 +1,22 @@
 node_modules/
+.hutch/
+dist/
+build/
+artifacts/
+*.tsbuildinfo
 
-# personal data — never commit
+# personal data — never commit (the app keeps these in its own data folder now,
+# but older checkouts kept them here)
 local.config.json
 tweets.json
 selected.json
 deleted.json
 backups/
 .env
+.cottontail-tmp/
+
+# Claude Code restart hook state
+.claude/.app-restart-stamp
+.claude/hooks/logs/
+.claude/hooks/app.log*
+.claude/settings.local.json

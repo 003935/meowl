@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$(cygpath -w \"$CLAUDE_PROJECT_DIR/.claude/hooks/restart-app.ps1\")\"",
+            "timeout": 60,
+            "statusMessage": "Restarting Meowl Delete if the source changed"
+          }
+        ]
+      }
+    ]
+  }
+}

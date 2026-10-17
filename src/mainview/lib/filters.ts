@@ -1,0 +1,77 @@
+import type { Tweet } from "../../shared/types";
+
+export type Presence = "all" | "only" | "exclude";
+
+// Loosely modelled on X's advanced search, limited to what the archive records.
+export type Filters = {
+	include: string; // comma-separated words / phrases / #tags / @names; at least one must appear
+	exclude: string; // comma-separated; none may appear
+	links: Presence;
+	media: Presence;
+	minLikes: string;
+	maxLikes: string; // "" = no upper limit
+	minReposts: string;
+	maxReposts: string;
+	since: string; // YYYY-MM-DD, inclusive
+	until: string; // YYYY-MM-DD, inclusive
+};
+
+export const EMPTY_FILTERS: Filters = {
+	include: "",
+	exclude: "",
+	links: "all",
+	media: "all",
+	minLikes: "",
+	maxLikes: "",
+	minReposts: "",
+	maxReposts: "",
+	since: "",
+	until: "",
+};
+
+/** How many fields differ from the defaults (for the badge on the Filters button). */
+export const activeFilterCount = (f: Filters) =>
+	(Object.keys(EMPTY_FILTERS) as (keyof Filters)[]).filter((k) => f[k].trim() !== EMPTY_FILTERS[k]).length;
+
+// 'cats, happy hour, "#Dogs"' → ["cats", "happy hour", "#dogs"]: comma-separated, quotes optional
+const terms = (s: string) =>
+	s.toLowerCase().split(",").map((t) => t.trim().replace(/^"(.*)"$/, "$1").trim()).filter(Boolean);
+
+const unescape = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+
+// date inputs are "YYYY-MM-DD"; interpret in local time to match the dates shown
+const dayStart = (d: string) => new Date(`${d}T00:00:00`).getTime();
+
+/** Build a predicate for `f` plus the header's quick search. */
+export function makeMatcher(f: Filters, quick: string) {
+	const include = terms(f.include);
+	const exclude = terms(f.exclude);
+	const q = quick.trim().toLowerCase();
+	const minLikes = Number(f.minLikes) || 0;
+	const minReposts = Number(f.minReposts) || 0;
+	const maxLikes = f.maxLikes === "" ? Infinity : Number(f.maxLikes);
+	const maxReposts = f.maxReposts === "" ? Infinity : Number(f.maxReposts);
+	const lo = f.since ? dayStart(f.since) : -Infinity;
+	const hi = f.until ? dayStart(f.until) + 86_400_000 : Infinity;
+
+	return (t: Tweet) => {
+		if (t.ts < lo || t.ts >= hi) return false;
+		if (t.likes < minLikes || t.likes > maxLikes) return false;
+		if (t.retweets_count < minReposts || t.retweets_count > maxReposts) return false;
+		if (f.links === "only" ? !t.urls.length : f.links === "exclude" && t.urls.length) return false;
+		if (f.media === "only" ? !t.media.length : f.media === "exclude" && t.media.length) return false;
+
+		const text = unescape(t.text).toLowerCase();
+		if (q && !text.includes(q)) return false;
+
+		const tokens: string[] = text.match(/[#@]?[\p{L}\p{N}_']+/gu) ?? [];
+		const plain = new Set(tokens.map((w) => w.replace(/^[#@]/, "")));
+		// a phrase matches as typed, "#tag" / "@name" only as that tag or mention, a word as a whole word
+		// (replies start with "@whoever", so "@whoever" also finds replies to them)
+		const has = (term: string) =>
+			/\s/.test(term) ? text.includes(term) : /^[#@]/.test(term) ? tokens.includes(term) : plain.has(term);
+		if (include.length && !include.some(has)) return false;
+		if (exclude.some(has)) return false;
+		return true;
+	};
+}

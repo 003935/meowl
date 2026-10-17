@@ -1,63 +1,64 @@
-# tweet-viewer
+# Meowl Delete
 
-Browse your Twitter/X data archive in three side-by-side columns (tweets, replies, retweets), tick what you want gone, and bulk-delete it from X with live progress.
+<img src="assets/icon.png" alt="Meowl Delete" width="128">
 
-Deletion goes through [emusks](https://emusks.tiago.zip), a reverse-engineered X client, using your own `auth_token` cookie.
+A desktop app for browsing your Twitter/X data archive in three side-by-side columns (tweets, replies, retweets), ticking what you want gone, and bulk-deleting it from X with live progress.
 
-> ⚠️ Using unofficial X APIs breaks X's Terms of Service and could get the account limited. Deletion is permanent. Test on a throwaway account first (`test-delete.mjs`).
+Built with [Electrobun](https://blackboard.sh/electrobun/) (main process on Bun, native system webview) and a React + [shadcn/ui](https://ui.shadcn.com) interface. Deletion goes through [emusks](https://emusks.tiago.zip), a reverse-engineered X client, using your own `auth_token` cookie.
+
+> ⚠️ Using unofficial X APIs breaks X's Terms of Service and could get the account limited. Deletion is permanent. Test on a throwaway account first (`test-delete.ts`).
 
 ## Setup
 
-Requires Node 20+.
+Requires [Bun](https://bun.sh) 1.2+.
 
 ```bash
-npm install
+bun install
 ```
 
-Point it at your unzipped archive (the folder that contains `data/tweets.js`):
-
-```bash
-echo '{ "archivePath": "/path/to/twitter-archive" }' > local.config.json
-```
-
-> **Keep this repo in a folder with no spaces in its path.** CycleTLS (used by emusks) launches its helper binary without quoting the path, and it silently fails to start from a folder like `My Projects/`. The archive folder itself may contain spaces.
+The first `bun run …` downloads Electrobun's toolchain (Hutch) into `~/.hutch` and prepares the SDK in `.hutch/devkit`.
 
 ## Use
 
 ```bash
-npm run build     # parse the archive → tweets.json (tweets before 2024-01-01; CUTOFF=YYYY-MM-DD to change)
-npm start         # http://127.0.0.1:8731/viewer/
+bun run start     # build the UI and open the app
+bun run dev       # same, rebuilding the app when src/bun changes
+bun run dev:hmr   # Vite hot reload for the UI (src/mainview) inside the app
+bun run build     # packaged app for this platform → build/ and artifacts/
 ```
 
-- Click a tweet (or shift-click a range) to tick it. Ticks autosave to `selected.json`.
-- Filter by text or date range; **Tick all shown** ticks only what matches.
-- Paste your `auth_token` (x.com → DevTools → Application → Cookies → `auth_token`), click **Delete N ticked**.
-- Runs are resumable: each success is recorded in `deleted.json` immediately.
+In the app:
 
-X allows roughly 200 deletes per 15 minutes per account; the deleter waits out rate limits automatically. A new token for the same account doesn't help.
+1. **Choose your archive.** Download it from x.com → Settings → Your account → Download an archive, unzip it, then pick the folder that contains `data/tweets.js`. Change it later with **Archive** in the header.
+2. **Tick tweets.** Click a tweet (or shift-click a range) to tick it. Ticks autosave. Narrow the columns with the search box and **Filters** (include/exclude words, phrases, #tags and @accounts, links/media, dates, and likes/reposts, where you can drag across a chart to pick a range); each column's **Tick all** / **Untick all** button only affects what's shown. **marked** opens a side panel of everything ticked (drag its edge to resize) that stays open while you keep ticking.
+3. **Delete.** Press **Delete**, paste your `auth_token` the first time (the dialog explains where to find it) and press **Delete**. Progress shows under the header, with **Stop**.
+
+Ctrl + / Ctrl − / Ctrl 0 (or Ctrl + mouse wheel) scale the whole UI.
+
+Runs are resumable: each success is recorded in `deleted.json` immediately. X allows roughly 200 deletes per 15 minutes per account; the deleter waits out rate limits automatically. A new token for the same account doesn't help.
+
+The app keeps its files (parsed archive, ticks, deletion log) in its per-user data folder, shown under "How do I get my auth_token?" in the delete dialog. Once X accepts your auth token, the app remembers it in memory until you quit (so later deletes don't ask again); it's never written to disk.
 
 ### Command line
 
 ```bash
-node delete-selected.mjs                                   # dry run of what's ticked
-X_AUTH_TOKEN=… node delete-selected.mjs --confirm          # delete what's ticked
-X_AUTH_TOKEN=… node test-delete.mjs [--confirm] <tweet links…>   # test on any account
+bun delete-selected.ts --data "<data folder>"                              # dry run of what's ticked
+X_AUTH_TOKEN=… bun delete-selected.ts --data "<data folder>" --confirm     # delete what's ticked
+X_AUTH_TOKEN=… bun test-delete.ts [--confirm] <tweet links…>               # test on any account
 ```
 
-## Files
+## Layout
 
-| File | Purpose |
+| Path | Purpose |
 |---|---|
-| `build.mjs` | Parses the archive into `tweets.json` |
-| `server.mjs` | Local server: serves the viewer and media, saves ticks, runs deletions |
-| `deleter.mjs` | Shared deletion logic (emusks, retries, rate-limit backoff, resumable state) |
-| `index.html` | The viewer UI |
-| `delete-selected.mjs` / `test-delete.mjs` | Command-line deletion |
-| `config.mjs` | Archive path lookup |
-
-## Roadmap: native Rust/GPUI app
-
-Proposed (not started): a native desktop app in Rust + [GPUI](https://www.gpui.rs) with the same features. emusks is JavaScript, so the plan is for the Rust app to spawn a small Node helper (reusing `deleter.mjs`) and exchange JSON-lines messages over stdin/stdout (`delete`, `stop` → progress events). On macOS, GPUI's `runtime_shaders` feature avoids needing full Xcode. The helper must live in a space-free path (see above).
+| `src/bun/index.ts` | Electrobun main process: opens the window, starts the local server |
+| `src/bun/server.ts` | Local API (`Bun.serve`): serves the UI and media, saves ticks, imports the archive, runs deletions |
+| `src/bun/archive.ts` | Parses the archive into `tweets.json` |
+| `src/bun/deleter.ts` | Deletion logic (emusks, retries, rate-limit backoff, resumable state) |
+| `src/bun/cycletls.ts` | Points emusks' CycleTLS helper at the copy shipped inside the packaged app |
+| `src/mainview/` | React + shadcn/ui interface (`components/ui` is generated by `bunx shadcn add …`) |
+| `electrobun.config.ts` | App metadata and build config (`mainProcess: "bun"`) |
+| `delete-selected.ts` / `test-delete.ts` | Command-line deletion |
 
 ## License
 
