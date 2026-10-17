@@ -1,8 +1,8 @@
 
-<p align="center">
+<div align="center">
   <h1> Meowl Delete </h1>
   <img src="assets/icon.png" alt="Meowl Delete" width="128">
-</p>
+</div>
 
 A desktop app for browsing your Twitter/X data archive in three side-by-side columns (tweets, replies, retweets), ticking what you want gone, and bulk-deleting it from X with live progress.
 
