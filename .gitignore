@@ -1,0 +1,9 @@
+node_modules/
+
+# personal data — never commit
+local.config.json
+tweets.json
+selected.json
+deleted.json
+backups/
+.env

@@ -1,0 +1,16 @@
+{
+  "name": "tweet-viewer",
+  "version": "1.0.0",
+  "description": "Browse your Twitter/X archive and bulk-delete old tweets, replies and retweets",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node server.mjs",
+    "delete:dry": "node delete-selected.mjs"
+  },
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "dependencies": {
+    "emusks": "^2.3.19"
+  },
+  "private": true
+}
