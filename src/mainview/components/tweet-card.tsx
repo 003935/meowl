@@ -78,7 +78,7 @@ export const TweetCard = memo(function TweetCard({ tweet: t, selected, onToggle 
 				{t.media.length > 0 && (
 					<div className={cn("mt-2 grid gap-1 overflow-hidden rounded-xl", t.media.length > 1 && "grid-cols-2")}>
 						{t.media.map((f) =>
-							/\.(mp4|mov)$/i.test(f) ? (
+							/\.(mp4|mov)($|\?)/i.test(f) ? (
 								<video key={f} src={mediaUrl(f)} controls playsInline muted preload="none" className="max-h-80 w-full bg-black object-cover" />
 							) : (
 								<img key={f} src={mediaUrl(f)} loading="lazy" alt="" className="max-h-80 w-full bg-black object-cover" />

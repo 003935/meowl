@@ -40,10 +40,23 @@ export function loadArchive(store: Store) {
 	};
 }
 
-// The pending queue: ticked ids that haven't been deleted yet.
+// Ids of every post currently loaded (archive or "Load from X").
+export function loadedIds(store: Store) {
+	try {
+		const a: Archive = JSON.parse(fs.readFileSync(store.TWEETS, "utf8"));
+		return new Set([...a.tweets, ...a.replies, ...a.retweets].map((t) => t.id));
+	} catch {
+		return new Set<string>();
+	}
+}
+
+// The pending queue: ticked ids that haven't been deleted yet. Only posts that are
+// actually loaded count, so a tick left over from another account's posts can
+// never be sent to X.
 export function pendingIds(store: Store) {
 	const deleted = new Set(store.readIds("deleted.json"));
-	return store.readIds("selected.json").filter((id) => !deleted.has(id));
+	const loaded = loadedIds(store);
+	return store.readIds("selected.json").filter((id) => !deleted.has(id) && loaded.has(id));
 }
 
 /**

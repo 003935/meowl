@@ -19,6 +19,9 @@ export type Archive = Record<Kind, Tweet[]>;
 
 export type Settings = {
 	archivePath?: string;
+	// "x" = loaded from your timeline with an auth_token instead of an archive
+	source?: "archive" | "x";
+	username?: string;
 };
 
 export type AppState = Settings & {
@@ -30,6 +33,17 @@ export type AppState = Settings & {
 export type ImportResult = {
 	total: number;
 	counts: Record<Kind, number>;
+};
+
+// "Load from X" (timeline fetch) progress
+export type FetchProgress = {
+	running: boolean;
+	stopping: boolean;
+	fetched: number;
+	waiting: number; // seconds left on a rate-limit wait
+	username: string;
+	error: string | null;
+	counts: Record<Kind, number> | null; // set when finished
 };
 
 export type Progress = {

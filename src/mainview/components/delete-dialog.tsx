@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { ChevronDownIcon, Loader2Icon, Trash2Icon } from "lucide-react";
+import { Loader2Icon, Trash2Icon } from "lucide-react";
 import type { Kind } from "../../shared/types";
 import { api } from "@/lib/api";
 import { KINDS } from "@/lib/kinds";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { code, TokenHelp } from "@/components/token-help";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,8 +18,6 @@ type Props = {
 	/** Starts the deletion (null = the token remembered this session); rejects with a readable message if it can't. */
 	onDelete: (token: string | null) => Promise<void>;
 };
-
-const code = "rounded bg-muted px-1 font-mono";
 
 // Asks for the auth_token when you press Delete, with how-to-get-it instructions.
 // Once X has accepted a token, the app remembers it until it quits and this is
@@ -94,24 +92,13 @@ export function DeleteDialog({ open, onOpenChange, counts, dataDir, onDelete }: 
 					</form>
 				)}
 
-				{!saved && <Collapsible className="text-xs text-muted-foreground">
-					<CollapsibleTrigger className="group inline-flex items-center gap-1 hover:text-foreground">
-						<ChevronDownIcon className="size-3.5 transition-transform group-data-[state=closed]:-rotate-90" />
-						How do I get my auth_token?
-					</CollapsibleTrigger>
-					<CollapsibleContent className="pt-2">
-						<ol className="ml-5 list-decimal space-y-1.5">
-							<li>Open <a className="text-sky-600 hover:underline dark:text-sky-400" href="https://x.com">x.com</a> in Chrome, Edge, Safari or Firefox, logged in to the account.</li>
-							<li>
-								Open DevTools (<kbd className={code}>F12</kbd> or <kbd className={code}>⌥⌘I</kbd>) → <b>Application</b> (Chrome/Edge) or <b>Storage</b> (Safari/Firefox) → <b>Cookies</b> → <code className={code}>https://x.com</code>.
-							</li>
-							<li>Copy the <b>Value</b> of the <code className={code}>auth_token</code> row and paste it above.</li>
-						</ol>
+				{!saved && (
+					<TokenHelp>
 						<p className="mt-2">
 							Data folder (ticks, deletion log): <code className={`${code} select-all`}>{dataDir}</code>
 						</p>
-					</CollapsibleContent>
-				</Collapsible>}
+					</TokenHelp>
+				)}
 
 				{error && (
 					<Alert variant="destructive">
