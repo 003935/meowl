@@ -29,6 +29,11 @@ export default {
 			// CycleTLS (used by emusks) spawns a Go helper that sits next to its own
 			// module; the bundler can't follow that, so ship this platform's helper.
 			[`node_modules/cycletls/dist/${CYCLETLS_BIN}`]: `cycletls/${CYCLETLS_BIN}`,
+			// emusks also looks the package up by name at runtime (require.resolve("cycletls")),
+			// which fails in the packaged app with no node_modules; ship just enough for that
+			// lookup to succeed next to the bundled main process.
+			"node_modules/cycletls/package.json": "bun/node_modules/cycletls/package.json",
+			"node_modules/cycletls/dist/index.js": "bun/node_modules/cycletls/dist/index.js",
 		},
 		watchIgnore: ["dist/**"],
 		mac: { bundleCEF: false, icons: "assets/icon.iconset" },

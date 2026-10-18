@@ -5,6 +5,7 @@ import { VIEWS_FOLDER } from "electrobun/bun/paths";
 import { startServer } from "./server";
 import { openStore } from "./store";
 import { useBundledCycleTLS } from "./cycletls";
+import { setWindowIcon } from "./window-icon";
 
 const VITE_DEV_URL = "http://localhost:5173";
 
@@ -41,8 +42,9 @@ async function mainViewUrl() {
 	return `http://127.0.0.1:${server.port}/`;
 }
 
-new BrowserWindow({
+const win = new BrowserWindow({
 	title: "Meowl Delete",
 	url: await mainViewUrl(),
 	frame: { width: 1400, height: 900, x: 120, y: 80 },
 });
+setWindowIcon(win);
