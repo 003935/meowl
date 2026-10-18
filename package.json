@@ -1,6 +1,6 @@
 {
   "name": "meowl-delete",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Browse your Twitter/X archive and bulk-delete old tweets, replies and retweets",
   "license": "AGPL-3.0-only",
   "type": "module",
