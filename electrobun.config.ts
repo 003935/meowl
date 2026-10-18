@@ -13,7 +13,7 @@ export default {
 		name: "Meowl Delete",
 		// Kept from the old name: the per-user data folder (ticks, deletion log) is keyed on it.
 		identifier: "dev.tweetdeleter.app",
-		version: "2.0.0",
+		version: "1.0.1",
 		description: "Browse your X archive and bulk-delete old tweets, replies and retweets",
 	},
 	build: {
