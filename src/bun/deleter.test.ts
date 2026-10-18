@@ -87,6 +87,15 @@ describe("runDeletion", () => {
 		expect(store.readIds("selected.json").sort()).toEqual(ids.filter((id) => !deleted.includes(id)).sort());
 	});
 
+	test("ticks for posts that aren't loaded (another account's) are never sent to X", async () => {
+		const store = setup(["a"]);
+		store.writeIds("selected.json", ["a", "someone-elses"]);
+		const client = fakeClient();
+		const res = await runDeletion({ store, token: "x", client, workers: 1, delayMs: 0 });
+		expect(res).toEqual({ ok: 1, fail: 0 });
+		expect(client.deletedIds).toEqual(["a"]);
+	});
+
 	test("an error X reports alongside data still counts as a failure", async () => {
 		const store = setup(["a"]);
 		const client = fakeClient(() => ({ data: {}, errors: [{ message: "nope" }] }));

@@ -1,4 +1,4 @@
-import type { AppState, Archive, ImportResult, Progress } from "../../shared/types";
+import type { AppState, Archive, FetchProgress, ImportResult, Progress } from "../../shared/types";
 
 async function call<T>(path: string, init?: { body?: unknown }): Promise<T> {
 	const r = await fetch(path, init ? {
@@ -25,8 +25,13 @@ export const api = {
 	tokenSaved: () => call<{ saved: boolean }>("/api/token").then((r) => r.saved),
 	forgetToken: () => call<{ saved: boolean }>("/api/token/forget", { body: {} }),
 	stop: () => call<{ stopping: boolean }>("/api/stop", { body: {} }),
+	/** Load your posts from X's timeline instead of an archive; token = null uses the remembered one */
+	startFetch: (token: string | null) => call<{ started: boolean }>("/api/fetch", { body: token === null ? { useSaved: true } : { token } }),
+	fetchProgress: () => call<FetchProgress>("/api/fetch/progress"),
+	stopFetch: () => call<{ stopping: boolean }>("/api/fetch/stop", { body: {} }),
 	// Links open in the system browser, not inside the app window.
 	openExternal: (url: string) => call("/api/open", { body: { url } }).catch(() => window.open(url, "_blank", "noopener")),
 };
 
-export const mediaUrl = (file: string) => `/media/${encodeURIComponent(file)}`;
+// archive media are files in the archive folder; posts loaded from X link to X's own media
+export const mediaUrl = (file: string) => (/^https:\/\//.test(file) ? file : `/media/${encodeURIComponent(file)}`);

@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { FolderCogIcon, ListChecksIcon, Loader2Icon, SearchIcon, SlidersHorizontalIcon, Trash2Icon, XIcon } from "lucide-react";
 import { toast } from "sonner";
-import type { AppState, Archive, Kind, Progress } from "../../shared/types";
+import type { AppState, Archive, FetchProgress as FetchProgressState, Kind, Progress } from "../../shared/types";
 import { api } from "@/lib/api";
 import logo from "@/assets/meowl.png";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { TweetColumn } from "@/components/tweet-column";
 import { DeleteDialog } from "@/components/delete-dialog";
 import { DeleteProgress } from "@/components/delete-progress";
+import { FetchProgress } from "@/components/fetch-progress";
 import { FiltersDialog } from "@/components/filters-dialog";
 import { ReviewPanel } from "@/components/review-panel";
 import { SortMenu, type Order } from "@/components/sort-menu";
@@ -47,11 +48,36 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 				setDeleted(gone);
 				setSelected(new Set(sel.filter((id) => !gone.has(id))));
 				poll(); // pick up a run that's already in progress
+				pollFetch();
 			},
 			(e) => setLoadError(e.message),
 		);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
+
+	// ---- "Load from X" still running: show posts as they arrive ----
+	const [fetching, setFetching] = useState<FetchProgressState | null>(null);
+	const fetchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+	const lastFetch = useRef<FetchProgressState | null>(null); // previous poll, null before the first
+	const pollFetch = useCallback(async () => {
+		clearTimeout(fetchTimer.current);
+		const p = await api.fetchProgress().catch(() => null);
+		if (!p) return;
+		const prev = lastFetch.current;
+		lastFetch.current = p;
+		setFetching(p.running ? p : null);
+		// X hands back newest first, each page older than the last: sort newest first while
+		// loading so new pages land at the bottom, out of sight, instead of on top of what you're reading
+		if (p.running && !prev?.running) { setOrder("desc"); setPopular(false); }
+		// a new page landed, or it just finished: reload the columns
+		// (first poll: the posts loaded on open may already be behind)
+		if (prev ? p.fetched !== prev.fetched || (prev.running && !p.running) : p.running) api.tweets().then(setData, () => {});
+		if (p.running) { fetchTimer.current = setTimeout(pollFetch, 1500); return; }
+		if (!prev?.running) return;
+		if (p.error) toast.error(`Stopped loading after ${p.fetched.toLocaleString()} posts`, { description: p.error });
+		else if (p.counts) toast.success(`Loaded ${p.counts.tweets} tweets, ${p.counts.replies} replies, ${p.counts.retweets} retweets${p.username ? ` from @${p.username}` : ""}`);
+	}, []);
+	useEffect(() => () => clearTimeout(fetchTimer.current), []);
 
 	// ---- autosave ticks ----
 	useEffect(() => {
@@ -91,6 +117,8 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 		return out;
 	}, [live, term, order, popular, filters]);
 	const filterCount = activeFilterCount(filters);
+	// columns jump back to the top when what you're looking at changes, not when more posts load in
+	const resetKey = JSON.stringify([term, order, popular, filters]);
 
 	// year range of the archive, for the date pickers
 	const years = useMemo(() => {
@@ -180,8 +208,8 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 		return (
 			<div className="grid h-dvh place-items-center p-6 text-center text-sm">
 				<div className="grid gap-3">
-					<p className="text-destructive">Couldn't load the imported archive: {loadError}</p>
-					<Button variant="outline" onClick={onOpenSetup}>Re-import archive</Button>
+					<p className="text-destructive">Couldn't load your posts: {loadError}</p>
+					<Button variant="outline" onClick={onOpenSetup}>Load them again</Button>
 				</div>
 			</div>
 		);
@@ -202,7 +230,7 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 					<SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input type="search" className="h-9 pl-9" placeholder="Search all columns…" value={query} onChange={(e) => setQuery(e.target.value)} />
 				</div>
-				<Button variant="ghost" size="icon" onClick={onOpenSetup} disabled={running} title="Change archive folder" aria-label="Change archive folder">
+				<Button variant="ghost" size="icon" onClick={onOpenSetup} disabled={running || !!fetching} title="Change archive, or load from X" aria-label="Change archive, or load from X">
 					<FolderCogIcon />
 				</Button>
 				<div className="flex items-center">
@@ -227,6 +255,7 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 				</Button>
 			</header>
 
+			{(fetching || state.source === "x") && <FetchProgress fetch={fetching} onStop={() => api.stopFetch().then(pollFetch)} />}
 			{job && (job.running || job.log.length > 0) && !progressDismissed && (
 				<DeleteProgress job={job} onStop={() => api.stop().then(poll)} onDismiss={() => setProgressDismissed(true)} />
 			)}
@@ -240,6 +269,7 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 							Icon={Icon}
 							list={lists[kind]}
 							yearHeaders={!popular}
+							resetKey={resetKey}
 							selected={selected}
 							onToggle={toggles[kind]}
 							onTickAll={() => tickAll(kind)}

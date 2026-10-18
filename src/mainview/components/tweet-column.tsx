@@ -12,6 +12,7 @@ type Props = {
 	Icon: LucideIcon;
 	list: Tweet[]; // already filtered + sorted
 	yearHeaders: boolean; // off when sorted by likes, where years are mixed
+	resetKey: string; // scroll back to the top when this changes (search, filters, order)
 	selected: Set<string>;
 	onToggle: (id: string, shift: boolean) => void;
 	onTickAll: () => void;
@@ -20,16 +21,16 @@ type Props = {
 };
 
 // One column, rendered CHUNK tweets at a time as you scroll.
-export function TweetColumn({ title, Icon, list, yearHeaders, selected, onToggle, onTickAll, onUntickAll, onSetMany }: Props) {
+export function TweetColumn({ title, Icon, list, yearHeaders, resetKey, selected, onToggle, onTickAll, onUntickAll, onSetMany }: Props) {
 	const [shown, setShown] = useState(CHUNK);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);
 
-	// new filter/order → back to the top
+	// new filter/order → back to the top (but not when more posts arrive from "Load from X")
 	useEffect(() => {
 		setShown(CHUNK);
 		scrollRef.current?.scrollTo({ top: 0 });
-	}, [list]);
+	}, [resetKey]);
 
 	useEffect(() => {
 		const el = sentinelRef.current;

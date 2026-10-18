@@ -3,6 +3,8 @@
 //   GET  /api/state      -> archive path, whether it's imported, counts
 //   POST /api/pick       -> opens a native folder picker, returns {path}
 //   POST /api/import     <- {archivePath}  parse the archive into tweets.json
+//   POST /api/fetch      <- {token} or {useSaved: true}  load your posts from X's timeline instead (no archive)
+//   GET  /api/fetch/progress -> state of that load      POST /api/fetch/stop  stop it, keeping what loaded
 //   GET  /api/tweets     -> { tweets, replies, retweets }
 //   GET  /api/selection  -> ticked ids          POST <- ticked ids
 //   GET  /api/deleted    -> ids already deleted
@@ -19,10 +21,11 @@
 // don't ask again; the UI only ever learns whether one is saved, never the token.
 import fs from "node:fs";
 import path from "node:path";
-import { runDeletion, pendingIds } from "./deleter";
+import { runDeletion, pendingIds, loadedIds } from "./deleter";
 import { importArchive, mediaDir } from "./archive";
+import { fetchTimeline } from "./timeline";
 import type { Store } from "./store";
-import type { AppState, Archive, Progress } from "../shared/types";
+import type { AppState, Archive, FetchProgress, Progress } from "../shared/types";
 
 export const DEFAULT_PORT = 8731;
 const VITE_PORT = 5173; // `bun run dev:hmr` proxies the UI's API calls from here
@@ -100,7 +103,61 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 			const a: Archive = JSON.parse(fs.readFileSync(store.TWEETS, "utf8"));
 			counts = { tweets: a.tweets.length, replies: a.replies.length, retweets: a.retweets.length };
 		} catch {}
-		return { ...s, imported: !!counts && !!s.archivePath, counts, dataDir: store.dir };
+		return { ...s, imported: !!counts && (!!s.archivePath || s.source === "x"), counts, dataDir: store.dir };
+	}
+
+	// ---- "Load from X" job (one at a time, never alongside a deletion) ----
+	const idleFetch = (): FetchProgress => ({ running: false, stopping: false, fetched: 0, waiting: 0, username: "", error: null, counts: null });
+	let fetchJob = idleFetch();
+	let fetchStop = false;
+
+	/** Like startJob: resolves once X accepts the token, then keeps loading in the background. */
+	function startFetch(token: string): Promise<void> {
+		fetchStop = false;
+		fetchJob = { ...idleFetch(), running: true };
+		let loggedIn = false;
+		let settle!: { ok: () => void; fail: (msg: string) => void };
+		const login = new Promise<void>((ok, fail) => (settle = { ok, fail: (msg) => fail(new Error(msg)) }));
+		fetchTimeline({
+			store,
+			token,
+			shouldStop: () => fetchStop,
+			onEvent: (e) => {
+				if (e.type === "start") {
+					loggedIn = true;
+					savedToken = token;
+					fetchJob.username = e.username;
+					const prev = store.settings();
+					if (prev.source !== "x" || prev.username !== e.username) store.writeIds("selected.json", []); // ticks belong to the old posts
+					store.saveSettings({ source: "x", username: e.username });
+					settle.ok();
+				}
+				if (e.type === "page") { fetchJob.fetched = e.fetched; fetchJob.waiting = 0; }
+				if (e.type === "wait") fetchJob.waiting = e.seconds;
+				if (e.type === "done") fetchJob.counts = e.counts;
+			},
+		})
+			.catch((err) => {
+				const msg = String(err?.message || err);
+				if (!loggedIn) {
+					const rejected = /failed to log in/i.test(msg);
+					if (rejected && token === savedToken) savedToken = null;
+					fetchJob = idleFetch();
+					settle.fail(rejected ? "X didn't accept that auth_token. Paste the correct one and try again." : `Couldn't log in to X: ${msg}`);
+					return;
+				}
+				fetchJob.error = msg;
+			})
+			.finally(() => { fetchJob.running = false; fetchJob.stopping = false; fetchJob.waiting = 0; });
+		return login;
+	}
+
+	// {token} or {useSaved: true} → the token to use, or an error message
+	function tokenFrom(body: { token?: unknown; useSaved?: unknown } | null): string | { error: string } {
+		const token = body?.useSaved ? savedToken ?? "" : String(body?.token || "").trim();
+		if (body?.useSaved && !token) return { error: "No saved auth_token — paste it again." };
+		if (!/^[A-Za-z0-9]{20,}$/.test(token)) return { error: "That doesn't look like an auth_token (should be a long hex string)." };
+		return token;
 	}
 
 	// ---- helpers ----
@@ -160,12 +217,33 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 
 					if (p === "/api/import" && req.method === "POST") {
 						if (job.running) return json({ error: "Wait for the running deletion to finish first." }, 409);
+						if (fetchJob.running) return json({ error: "Wait for loading from X to finish first." }, 409);
 						const body = await readJson(req, 10_000);
 						const archivePath = String(body?.archivePath || "").trim();
 						if (!archivePath) return json({ error: "Choose your archive folder first." }, 400);
 						const result = importArchive(store, archivePath);
-						store.saveSettings({ archivePath });
+						const prev = store.settings();
+						if (prev.source === "x" || prev.archivePath !== archivePath) store.writeIds("selected.json", []); // ticks belong to the old posts
+						store.saveSettings({ archivePath, source: "archive" });
 						return json(result);
+					}
+
+					if (p === "/api/fetch" && req.method === "POST") {
+						if (job.running) return json({ error: "Wait for the running deletion to finish first." }, 409);
+						if (fetchJob.running) return json({ error: "Already loading from X." }, 409);
+						const token = tokenFrom(await readJson(req, 10_000));
+						if (typeof token !== "string") return json(token, 400);
+						try {
+							await startFetch(token); // wait for X to accept the login
+						} catch (e) {
+							return json({ error: (e as Error).message, tokenSaved: !!savedToken }, 401);
+						}
+						return json({ started: true }, 202);
+					}
+					if (p === "/api/fetch/progress") return json(fetchJob);
+					if (p === "/api/fetch/stop" && req.method === "POST") {
+						if (fetchJob.running) { fetchStop = true; fetchJob.stopping = true; }
+						return json({ stopping: fetchJob.running });
 					}
 
 					if (p === "/api/tweets") {
@@ -173,7 +251,10 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 						return (await f.exists()) ? new Response(f, { headers: { "Content-Type": "application/json" } }) : notFound();
 					}
 
-					if (p === "/api/selection" && req.method === "GET") return json(store.readIds("selected.json"));
+					if (p === "/api/selection" && req.method === "GET") {
+						const loaded = loadedIds(store); // drop ticks for posts that aren't loaded (e.g. another account's)
+						return json(store.readIds("selected.json").filter((id) => loaded.has(id)));
+					}
 					if (p === "/api/selection" && req.method === "POST") {
 						const ids = await readJson(req);
 						if (!Array.isArray(ids) || !ids.every((x) => typeof x === "string" && /^\d+$/.test(x))) return json({ error: "bad ids" }, 400);
@@ -187,10 +268,10 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 					if (p === "/api/progress") return json(job);
 					if (p === "/api/delete" && req.method === "POST") {
 						if (job.running) return json({ error: "A deletion is already running." }, 409);
-						const body = await readJson(req, 10_000);
-						const token = body?.useSaved ? savedToken ?? "" : String(body?.token || "").trim();
-						if (body?.useSaved && !token) return json({ error: "No saved auth_token — paste it again." }, 400);
-						if (!/^[A-Za-z0-9]{20,}$/.test(token)) return json({ error: "That doesn't look like an auth_token (should be a long hex string)." }, 400);
+						// deleting while "Load from X" is still running is fine: the load pages back by
+						// post id, so deleting newer posts doesn't make it skip older ones
+						const token = tokenFrom(await readJson(req, 10_000));
+						if (typeof token !== "string") return json(token, 400);
 						if (!pendingIds(store).length) return json({ error: "Nothing is ticked." }, 400);
 						try {
 							await startJob(token); // wait for X to accept the login
