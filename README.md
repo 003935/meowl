@@ -8,7 +8,7 @@ A desktop app for browsing your Twitter/X data archive in three side-by-side col
 
 Built with [Electrobun](https://blackboard.sh/electrobun/) (main process on Bun, native system webview) and a React + [shadcn/ui](https://ui.shadcn.com) interface. Deletion goes through [emusks](https://emusks.tiago.zip), a reverse-engineered X client, using your own `auth_token` cookie.
 
->  Using unofficial X APIs breaks X's Terms of Service and could get the account limited. Deletion is permanent. Test on a throwaway account first (`test-delete.ts`).
+>  Using unofficial X APIs breaks X's Terms of Service and could get the account limited. Deletion is permanent!
 
 ## Screenshots
 
