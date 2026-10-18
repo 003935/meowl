@@ -133,6 +133,7 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 	const toggles = useMemo(() => Object.fromEntries(KINDS.map(({ kind }) => [kind, makeToggle(kind)])) as Record<Kind, ReturnType<typeof makeToggle>>, [makeToggle]);
 
 	const tickAll = (kind: Kind) => update((s) => { for (const t of lists[kind]) s.add(t.id); });
+	const setMany = (ids: string[], on: boolean) => update((s) => { for (const id of ids) on ? s.add(id) : s.delete(id); });
 	const untickAll = (kind: Kind) => update((s) => { for (const t of lists[kind]) s.delete(t.id); });
 
 	// ---- deleting ----
@@ -243,6 +244,7 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 							onToggle={toggles[kind]}
 							onTickAll={() => tickAll(kind)}
 							onUntickAll={() => untickAll(kind)}
+							onSetMany={setMany}
 						/>
 					))}
 				</div>

@@ -51,9 +51,38 @@ describe("words", () => {
 		expect(match({ include: "you & me" }, { text: "you &amp; me" })).toBe(true);
 	});
 	test("quick search from the header", () => {
-		expect(match({}, { text: "Hello World" }, "o wor")).toBe(true);
+		expect(match({}, { text: "Hello World" }, "world hello")).toBe(true);
 		expect(match({}, { text: "Hello World" }, "#fun")).toBe(false);
 		expect(match({}, { text: "so #fun" }, "#fun")).toBe(true);
+	});
+	test("quick search matches every word, in any order", () => {
+		expect(match({}, { text: "this pizza is bad" }, "bad pizza")).toBe(true);
+		expect(match({}, { text: "this pizza is bad" }, "  pizza   bad ")).toBe(true);
+		expect(match({}, { text: "this pizza is good" }, "bad pizza")).toBe(false);
+	});
+	test("quick search matches whole words and their variants, not longer words", () => {
+		expect(match({}, { text: "my cat is asleep" }, "cat")).toBe(true);
+		expect(match({}, { text: "so many cats" }, "cat")).toBe(true);
+		expect(match({}, { text: "my cat is asleep" }, "cats")).toBe(true);
+		expect(match({}, { text: "scattered categories" }, "cat")).toBe(false);
+		expect(match({}, { text: "a carpet in the car park" }, "carp")).toBe(false);
+		expect(match({}, { text: "kept running" }, "run")).toBe(true);
+		expect(match({}, { text: "I DELETED it" }, "delete")).toBe(true);
+		expect(match({}, { text: "it's (fine)" }, "(fine")).toBe(true);
+		expect(match({}, { text: "don’t" }, "don't")).toBe(true);
+	});
+	test("quick search: * is not a wildcard", () => {
+		expect(match({}, { text: "categories" }, "cat*")).toBe(false);
+	});
+	test("quick search: @names and #tags match only that mention or tag", () => {
+		expect(match({}, { text: "@bigcatfan hi" }, "cat")).toBe(false);
+		expect(match({}, { text: "@bigcatfan hi" }, "@bigcatfan")).toBe(true);
+		expect(match({}, { text: "@bigcatfan hi" }, "bigcatfan")).toBe(true);
+		expect(match({}, { text: "bigcatfan hi" }, "@bigcatfan")).toBe(false);
+	});
+	test("quick search ignores accents", () => {
+		expect(match({}, { text: "Best Café ever" }, "cafe")).toBe(true);
+		expect(match({}, { text: "best cafe ever" }, "café")).toBe(true);
 	});
 });
 
