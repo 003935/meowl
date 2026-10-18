@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { Tweet } from "../../shared/types";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { TweetCard } from "@/components/tweet-card";
 
 const CHUNK = 150;
@@ -15,10 +16,11 @@ type Props = {
 	onToggle: (id: string, shift: boolean) => void;
 	onTickAll: () => void;
 	onUntickAll: () => void;
+	onSetMany: (ids: string[], on: boolean) => void;
 };
 
 // One column, rendered CHUNK tweets at a time as you scroll.
-export function TweetColumn({ title, Icon, list, yearHeaders, selected, onToggle, onTickAll, onUntickAll }: Props) {
+export function TweetColumn({ title, Icon, list, yearHeaders, selected, onToggle, onTickAll, onUntickAll, onSetMany }: Props) {
 	const [shown, setShown] = useState(CHUNK);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);
@@ -42,6 +44,18 @@ export function TweetColumn({ title, Icon, list, yearHeaders, selected, onToggle
 
 	// One button: "Tick all" until everything shown is ticked, then "Untick all".
 	const allTicked = useMemo(() => list.length > 0 && list.every((t) => selected.has(t.id)), [list, selected]);
+
+	// ids per year across the whole list (not just what's rendered), for the year tick boxes
+	const byYear = useMemo(() => {
+		const m = new Map<number, string[]>();
+		if (yearHeaders) for (const t of list) {
+			const y = new Date(t.ts).getFullYear();
+			const ids = m.get(y);
+			if (ids) ids.push(t.id);
+			else m.set(y, [t.id]);
+		}
+		return m;
+	}, [list, yearHeaders]);
 
 	let lastYear: number | null = null;
 	return (
@@ -72,11 +86,7 @@ export function TweetColumn({ title, Icon, list, yearHeaders, selected, onToggle
 					lastYear = y;
 					return (
 						<Fragment key={t.id}>
-							{header && (
-								<div className="sticky top-0 z-10 border-b bg-background/95 px-4 py-1.5 text-xs font-bold tracking-wide text-muted-foreground backdrop-blur">
-									{y}
-								</div>
-							)}
+							{header && <YearHeader year={y} ids={byYear.get(y) ?? []} selected={selected} onSetMany={onSetMany} />}
 							<TweetCard tweet={t} selected={selected.has(t.id)} onToggle={onToggle} />
 						</Fragment>
 					);
@@ -84,5 +94,24 @@ export function TweetColumn({ title, Icon, list, yearHeaders, selected, onToggle
 				{shown < list.length && <div ref={sentinelRef} className="h-px" />}
 			</div>
 		</section>
+	);
+}
+
+// Sticky year divider; its tick box ticks (or unticks) every tweet from that year in the column.
+function YearHeader({ year, ids, selected, onSetMany }: { year: number; ids: string[]; selected: Set<string>; onSetMany: Props["onSetMany"] }) {
+	const all = ids.length > 0 && ids.every((id) => selected.has(id));
+	return (
+		<label
+			className="sticky top-0 z-10 flex cursor-pointer items-center gap-3 border-b bg-background/95 px-4 py-1.5 text-xs font-bold tracking-wide text-muted-foreground backdrop-blur"
+			title={all ? `Untick everything from ${year}` : `Tick all ${ids.length.toLocaleString()} from ${year}`}
+		>
+			<Checkbox
+				className="data-checked:border-destructive! data-checked:bg-destructive! data-checked:text-white!"
+				checked={all}
+				onCheckedChange={() => onSetMany(ids, !all)}
+				aria-label={`Tick everything from ${year}`}
+			/>
+			{year}
+		</label>
 	);
 }

@@ -1,3 +1,4 @@
+import { stemmer } from "stemmer";
 import type { Tweet } from "../../shared/types";
 
 export type Presence = "all" | "only" | "exclude";
@@ -39,6 +40,36 @@ const terms = (s: string) =>
 
 const unescape = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
+// lowercase and strip accents, so "cafe" finds "Café"
+const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").replace(/’/g, "'").toLowerCase();
+
+const WORD = /[#@]?[\p{L}\p{N}_']+/gu;
+
+// Each tweet's words for the quick search, worked out once per tweet.
+// "stems" are base forms (Porter stemmer): "cats" → "cat", "running" → "run".
+type Words = { tokens: Set<string>; stems: Set<string> };
+const wordCache = new WeakMap<Tweet, Words>();
+function wordsOf(t: Tweet): Words {
+	let w = wordCache.get(t);
+	if (!w) {
+		const tokens = fold(unescape(t.text)).match(WORD) ?? [];
+		w = { tokens: new Set(tokens), stems: new Set(tokens.map((x) => stemmer(x.replace(/^[#@]/, "")))) };
+		wordCache.set(t, w);
+	}
+	return w;
+}
+
+// One quick-search word → a test on a tweet's words:
+//   "cats"  same base word ("cat", "cats"; not "scat" or "category")
+//   "@name" / "#tag"  that mention or tag only
+function quickTerm(raw: string): ((w: Words) => boolean)[] {
+	return (raw.match(WORD) ?? []).map((p) => {
+		if (/^[#@]/.test(p)) return (w) => w.tokens.has(p);
+		const stem = stemmer(p);
+		return (w) => w.stems.has(stem);
+	});
+}
+
 // date inputs are "YYYY-MM-DD"; interpret in local time to match the dates shown
 const dayStart = (d: string) => new Date(`${d}T00:00:00`).getTime();
 
@@ -46,7 +77,8 @@ const dayStart = (d: string) => new Date(`${d}T00:00:00`).getTime();
 export function makeMatcher(f: Filters, quick: string) {
 	const include = terms(f.include);
 	const exclude = terms(f.exclude);
-	const q = quick.trim().toLowerCase();
+	// quick search: every word must appear, in any order, ignoring accents (see quickTerm)
+	const q = fold(quick).split(/\s+/).flatMap(quickTerm);
 	const minLikes = Number(f.minLikes) || 0;
 	const minReposts = Number(f.minReposts) || 0;
 	const maxLikes = f.maxLikes === "" ? Infinity : Number(f.maxLikes);
@@ -62,7 +94,10 @@ export function makeMatcher(f: Filters, quick: string) {
 		if (f.media === "only" ? !t.media.length : f.media === "exclude" && t.media.length) return false;
 
 		const text = unescape(t.text).toLowerCase();
-		if (q && !text.includes(q)) return false;
+		if (q.length) {
+			const words = wordsOf(t);
+			if (!q.every((test) => test(words))) return false;
+		}
 
 		const tokens: string[] = text.match(/[#@]?[\p{L}\p{N}_']+/gu) ?? [];
 		const plain = new Set(tokens.map((w) => w.replace(/^[#@]/, "")));
