@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { FolderCogIcon, ListChecksIcon, Loader2Icon, SearchIcon, SlidersHorizontalIcon, Trash2Icon, XIcon } from "lucide-react";
+import { FolderCogIcon, ImageDownIcon, ListChecksIcon, Loader2Icon, SearchIcon, SlidersHorizontalIcon, Trash2Icon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { AppState, Archive, FetchProgress as FetchProgressState, Kind, Progress } from "../../shared/types";
 import { api } from "@/lib/api";
@@ -22,7 +22,7 @@ const readReviewOpen = () => {
 	try { return localStorage.getItem(REVIEW_KEY) === "1"; } catch { return false; }
 };
 
-export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: () => void }) {
+export function Viewer({ state, onOpenSetup, onOpenMedia }: { state: AppState; onOpenSetup: () => void; onOpenMedia: () => void }) {
 	const [data, setData] = useState<Archive | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -232,6 +232,9 @@ export function Viewer({ state, onOpenSetup }: { state: AppState; onOpenSetup: (
 				</div>
 				<Button variant="ghost" size="icon" onClick={onOpenSetup} disabled={running || !!fetching} title="Change archive, or load from X" aria-label="Change archive, or load from X">
 					<FolderCogIcon />
+				</Button>
+				<Button variant="ghost" size="icon" onClick={onOpenMedia} title="Download an account's media" aria-label="Download an account's media">
+					<ImageDownIcon />
 				</Button>
 				<div className="flex items-center">
 					<Button variant={filterCount ? "default" : "secondary"} className="rounded-full" onClick={() => setFiltersOpen(true)}>

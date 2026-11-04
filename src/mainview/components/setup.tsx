@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DownloadIcon, FolderOpenIcon, Loader2Icon, SquareIcon } from "lucide-react";
+import { DownloadIcon, FolderOpenIcon, ImageDownIcon, Loader2Icon, SquareIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { AppState, FetchProgress } from "../../shared/types";
 import { api } from "@/lib/api";
@@ -16,12 +16,13 @@ type Props = {
 	state: AppState;
 	onImported: () => void;
 	onCancel?: () => void;
+	onOpenMedia?: () => void;
 };
 
 // First run (or the folder button): bring in your posts, from the archive or straight from X.
-export function Setup({ state, onImported, onCancel }: Props) {
+export function Setup({ state, onImported, onCancel, onOpenMedia }: Props) {
 	return (
-		<div className="grid min-h-dvh place-items-center p-6">
+		<div className="flex min-h-dvh flex-col items-center justify-center p-6">
 			<Card className="w-full max-w-xl [--card-spacing:--spacing(7)]">
 				<CardHeader>
 					<div className="flex items-center gap-3">
@@ -44,6 +45,11 @@ export function Setup({ state, onImported, onCancel }: Props) {
 					</TabsContent>
 				</Tabs>
 			</Card>
+			{onOpenMedia && (
+				<button type="button" className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground hover:underline" onClick={onOpenMedia}>
+					<ImageDownIcon className="size-4" /> Or download an account's photos, videos and GIFs
+				</button>
+			)}
 		</div>
 	);
 }

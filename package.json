@@ -14,7 +14,8 @@
     "build:canary": "electrobun prepare && vite build && electrobun build --env=canary",
     "test": "bun test",
     "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.bun.json",
-    "delete:dry": "bun delete-selected.ts"
+    "delete:dry": "bun delete-selected.ts",
+    "download": "bun download-media.ts"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

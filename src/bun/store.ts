@@ -1,7 +1,7 @@
 // Where the app keeps its files. The desktop app uses its per-user data folder;
 // the command-line scripts pass the same folder in (see delete-selected.ts).
 //
-//   settings.json  archive path
+//   settings.json  archive path, "Download media" save folder
 //   tweets.json    parsed archive ({ tweets, replies, retweets })
 //   selected.json  ticked ids
 //   deleted.json   ids already deleted (resume log)
