@@ -16,9 +16,10 @@ const store = openStore(Utils.paths.userData);
 const server = startServer({
 	store,
 	viewsDir: path.join(VIEWS_FOLDER, "mainview"),
-	pickFolder: async () => {
+	defaultMediaDir: path.join(Utils.paths.downloads, "Meowl Download"),
+	pickFolder: async (startingFolder) => {
 		const [picked] = await Utils.openFileDialog({
-			startingFolder: store.settings().archivePath || Utils.paths.downloads,
+			startingFolder: startingFolder || store.settings().archivePath || Utils.paths.downloads,
 			canChooseFiles: false,
 			canChooseDirectory: true,
 			allowsMultipleSelection: false,
@@ -26,6 +27,7 @@ const server = startServer({
 		return picked || null;
 	},
 	openExternal: (url) => Utils.openExternal(url),
+	reveal: (dir) => Utils.showItemInFolder(dir),
 });
 console.log(`Data folder: ${store.dir}`);
 console.log(`Serving on http://127.0.0.1:${server.port}/`);

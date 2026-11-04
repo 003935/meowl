@@ -15,6 +15,7 @@
 //   GET  /api/progress   -> state of the current/last deletion run
 //   POST /api/open       <- {url}  open an x.com / https link in the default browser
 //   GET  /media/<file>   -> a file from the archive's data/tweets_media
+//   /api/media/…         "Download media": see media-api.ts
 //
 // The auth token is never written to disk or sent anywhere except X. Once X accepts
 // it, it's remembered in this process's memory until the app quits, so later runs
@@ -24,6 +25,8 @@ import path from "node:path";
 import { runDeletion, pendingIds, loadedIds } from "./deleter";
 import { importArchive, mediaDir } from "./archive";
 import { fetchTimeline } from "./timeline";
+import { createMediaApi } from "./media-api";
+import type { MediaClient } from "./media";
 import type { Store } from "./store";
 import type { AppState, Archive, FetchProgress, Progress } from "../shared/types";
 
@@ -33,11 +36,16 @@ const VITE_PORT = 5173; // `bun run dev:hmr` proxies the UI's API calls from her
 type Options = {
 	store: Store;
 	viewsDir: string; // built UI (index.html + assets)
-	pickFolder: () => Promise<string | null>;
+	pickFolder: (startingFolder?: string) => Promise<string | null>;
 	openExternal: (url: string) => void;
+	defaultMediaDir: string; // where "Download media" saves until you pick another folder
+	reveal: (dir: string) => void;
+	// for tests: stand-ins for X and its CDN
+	mediaClient?: () => MediaClient;
+	fetchFile?: (url: string) => Promise<Response>;
 };
 
-export function startServer({ store, viewsDir, pickFolder, openExternal }: Options) {
+export function startServer({ store, viewsDir, pickFolder, openExternal, defaultMediaDir, reveal, mediaClient, fetchFile }: Options) {
 	// ---- deletion job state (one run at a time) ----
 	let job: Progress = { running: false, total: 0, done: 0, ok: 0, fail: 0, waiting: 0, stopping: false, error: null, log: [] };
 	let stopRequested = false;
@@ -129,7 +137,7 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 					fetchJob.username = e.username;
 					const prev = store.settings();
 					if (prev.source !== "x" || prev.username !== e.username) store.writeIds("selected.json", []); // ticks belong to the old posts
-					store.saveSettings({ source: "x", username: e.username });
+					store.saveSettings({ source: "x", username: e.username, mediaOutDir: prev.mediaOutDir });
 					settle.ok();
 				}
 				if (e.type === "page") { fetchJob.fetched = e.fetched; fetchJob.waiting = 0; }
@@ -159,6 +167,16 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 		if (!/^[A-Za-z0-9]{20,}$/.test(token)) return { error: "That doesn't look like an auth_token (should be a long hex string)." };
 		return token;
 	}
+
+	const mediaApi = createMediaApi({
+		store,
+		defaultOutDir: defaultMediaDir,
+		pickFolder,
+		reveal,
+		client: mediaClient,
+		fetchFile,
+		tokens: { saved: () => savedToken, remember: (t) => { savedToken = t; }, forget: () => { savedToken = null; }, from: tokenFrom },
+	});
 
 	// ---- helpers ----
 	const json = (body: unknown, status = 200) => Response.json(body, { status });
@@ -211,6 +229,9 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 
 				const p = decodeURIComponent(url.pathname);
 				try {
+					const media = await mediaApi.handle(req, url, p);
+					if (media) return media;
+
 					if (p === "/api/state") return json(appState());
 
 					if (p === "/api/pick" && req.method === "POST") return json({ path: await pickFolder() });
@@ -224,7 +245,7 @@ export function startServer({ store, viewsDir, pickFolder, openExternal }: Optio
 						const result = importArchive(store, archivePath);
 						const prev = store.settings();
 						if (prev.source === "x" || prev.archivePath !== archivePath) store.writeIds("selected.json", []); // ticks belong to the old posts
-						store.saveSettings({ archivePath, source: "archive" });
+						store.saveSettings({ archivePath, source: "archive", mediaOutDir: prev.mediaOutDir });
 						return json(result);
 					}
 
